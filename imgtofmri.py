@@ -688,25 +688,22 @@ def get_luminance(conv=True, rgb=False, input_dir="../partly_cloudy/"):
 def pc_bootstrapped_pred_lum(bound_averages):
     # plt.figure(figsize=(5, 5))
     nTR = bound_averages.shape[1]
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,5))
+    fig, ax = plt.subplots(figsize=(7,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
     sorted_arr = np.sort(bound_averages, axis=2)
-    axes[0].plot(bound_averages[0], color='blue', alpha = 0.008,)
-    axes[0].plot(bound_averages[1], color='green', alpha = 0.008,)
-    axes[1].fill_between(range(21), sorted_arr[0,:,50], sorted_arr[0,:,-50], alpha=0.5, color="blue")
-    axes[1].fill_between(range(21), sorted_arr[1,:,50], sorted_arr[1,:,-50], alpha=0.5, color="green")
+    ax.plot(bound_averages[0], color='blue', alpha = 0.008,)
+    ax.plot(bound_averages[1], color='green', alpha = 0.008,)
 
 
     ticks = [i for i in range(0, 21)][::2]
     ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
-    for ax in axes.ravel():
-        ax.set_ylim([-1,1])
-        ax.set_xlim([0,20])
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(ticklabels)
-        ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-        ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.set_ylim([-1,1])
+    ax.set_xlim([0,20])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -716,27 +713,25 @@ def pc_bootstrapped_pred_lum(bound_averages):
 
 def pc_bootstrapped_pred_lum_3TRs(bound_averages):
     nTR = bound_averages.shape[1]
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,5))
+    fig, ax = plt.subplots(figsize=(5,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
     sorted_arr = np.sort(bound_averages, axis=2)
-    axes[0].plot(bound_averages[0,7:14], color='blue', alpha = 0.008,
+    ax.plot(bound_averages[0,7:14], color='blue', alpha = 0.008,
                 label=f'avg corr(pred,true), mean: {np.mean(bound_averages[:,0,:]):.3f}')
-    axes[0].plot(bound_averages[1,7:14], color='green', alpha = 0.008,
+    ax.plot(bound_averages[1,7:14], color='green', alpha = 0.008,
                 label=f'avg corr(lum,true), mean: {np.mean(bound_averages[:,1,:]):.3f}')
-    axes[1].fill_between(range(7), sorted_arr[0,7:14,50], sorted_arr[0,7:14,-50], alpha=0.5, color="blue")
-    axes[1].fill_between(range(7), sorted_arr[1,7:14,50], sorted_arr[1,7:14,-50], alpha=0.5, color="green")
 
 
     ticks = [i for i in range(0, 7)]
     ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
-    for ax in axes.ravel():
-        ax.set_ylim([-1,1])
-        ax.set_xlim([0,6])
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(ticklabels)
-        ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-        ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.set_ylim([-0.5,0.5])
+    ax.set_xlim([0,6])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted(blue) luminance(green)
@@ -746,24 +741,20 @@ def pc_bootstrapped_pred_lum_3TRs(bound_averages):
 def pc_bootstrapped_difference(bound_averages):
     # plt.figure(figsize=(5, 5))
     nTR = bound_averages.shape[1]
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,5))
+    fig, ax = plt.subplots(figsize=(7,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
     sorted_arr = np.sort(bound_averages, axis=2)
-    axes[0].plot(bound_averages[0]-bound_averages[1], color='red', alpha = 0.008,)
-    axes[1].fill_between(range(21),
-                        sorted_arr[0,:,50]-sorted_arr[1,:,50],
-                        sorted_arr[0,:,-50]-sorted_arr[1,:,-50], alpha=0.5, color="red")
+    ax.plot(bound_averages[0]-bound_averages[1], color='red', alpha = 0.008,)
 
     ticks = [i for i in range(0, 21)][::2]
     ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
-    for ax in axes.ravel():
-        ax.set_ylim([-1,1])
-        ax.set_xlim([0,20])
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(ticklabels)
-        ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-        ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.set_ylim([-1,1])
+    ax.set_xlim([0,20])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -774,25 +765,21 @@ def pc_bootstrapped_difference(bound_averages):
 def pc_bootstrapped_difference_3TRs(bound_averages):
     # plt.figure(figsize=(5, 5))
     nTR = bound_averages.shape[1]
-    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10,5))
+    fig, ax = plt.subplots(figsize=(5,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
     sorted_arr = np.sort(bound_averages, axis=2)
-    axes[0].plot(bound_averages[0,7:14]-bound_averages[1,7:14], color='red', alpha = 0.008,)
-    axes[1].fill_between(range(7),
-                        sorted_arr[0,7:14,50]-sorted_arr[1,7:14,50],
-                        sorted_arr[0,7:14,-50]-sorted_arr[1,7:14,-50], alpha=0.5, color="red")
+    ax.plot(bound_averages[0,7:14]-bound_averages[1,7:14], color='red', alpha = 0.008,)
 
     ticks = [i for i in range(0, 7)]
     ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
-    for ax in axes.ravel():
-        ax.set_ylim([-1,1])
-        ax.set_xlim([0,6])
-        ax.set_xticks(ticks)
-        ax.set_xticklabels(ticklabels)
-        ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-        # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5, label="event boundaries (hum annotated)")
-        ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.set_ylim([-0.5,0.5])
+    ax.set_xlim([0,6])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5, label="event boundaries (hum annotated)")
+    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted-luminance
@@ -962,4 +949,111 @@ def pc_difference_timecourse(corr):
     h.reverse(); l.reverse()
     axes.legend(h,l,fontsize='large',loc='lower right')
     # plt.title("Row by row correlation from TRxTR matrices, predicted - real, all TRs, 100 bootstraps")
+    plt.show()
+
+
+def pc_bootstrapped_pred_lum_conf_intervals(bound_averages):
+    # plt.figure(figsize=(5, 5))
+    nTR = bound_averages.shape[1]
+    # fig, axes = plt.subplots(nrows=1, ncols=1, figsize=(5,5))
+    fig, ax = plt.subplots(figsize=(7,5))
+    plt.tick_params(axis='x', top=False, labeltop=False)
+
+    sorted_arr = np.sort(bound_averages, axis=2)
+    # axes[0].plot(bound_averages[0], color='blue', alpha = 0.008,)
+    # axes[0].plot(bound_averages[1], color='green', alpha = 0.008,)
+    ax.fill_between(range(21), sorted_arr[0,:,50], sorted_arr[0,:,-50], alpha=0.5, color="blue")
+    ax.fill_between(range(21), sorted_arr[1,:,50], sorted_arr[1,:,-50], alpha=0.5, color="green")
+
+
+    ticks = [i for i in range(0, 21)][::2]
+    ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
+    ax.set_ylim([-1,1])
+    ax.set_xlim([0,20])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+
+    # plt.legend(fontsize='large', loc='lower right')
+    # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
+    # btw corr of TRxTR matrices, all TRs predicted(blue) luminance(green)
+    # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
+    plt.show()
+
+def pc_bootstrapped_pred_lum_3TRs_conf_intervals(bound_averages):
+    nTR = bound_averages.shape[1]
+    fig, ax = plt.subplots(figsize=(5,5))
+    plt.tick_params(axis='x', top=False, labeltop=False)
+
+    sorted_arr = np.sort(bound_averages, axis=2)
+    ax.fill_between(range(7), sorted_arr[0,7:14,50], sorted_arr[0,7:14,-50], alpha=0.5, color="blue")
+    ax.fill_between(range(7), sorted_arr[1,7:14,50], sorted_arr[1,7:14,-50], alpha=0.5, color="green")
+
+
+    ticks = [i for i in range(0, 7)]
+    ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
+    ax.set_ylim([-0.5,0.5])
+    ax.set_xlim([0,6])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+
+    # plt.legend(fontsize='large', loc='lower right')
+    # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
+    # btw corr of TRxTR matrices, all TRs predicted(blue) luminance(green)
+    # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
+    plt.show()
+
+def pc_bootstrapped_difference_conf_intervals(bound_averages):
+    # plt.figure(figsize=(5, 5))
+    nTR = bound_averages.shape[1]
+    fig, ax = plt.subplots(figsize=(7,5))
+    plt.tick_params(axis='x', top=False, labeltop=False)
+
+    sorted_arr = np.sort(bound_averages, axis=2)
+    ax.fill_between(range(21),
+                    sorted_arr[0,:,50]-sorted_arr[1,:,50],
+                    sorted_arr[0,:,-50]-sorted_arr[1,:,-50], alpha=0.5, color="red")
+
+    ticks = [i for i in range(0, 21)][::2]
+    ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
+    ax.set_ylim([-1,1])
+    ax.set_xlim([0,20])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+
+    # plt.legend(fontsize='large', loc='lower right')
+    # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
+    # btw corr of TRxTR matrices, all TRs predicted-luminance
+    # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
+    plt.show()
+
+def pc_bootstrapped_difference_3TRs_conf_intervals(bound_averages):
+    # plt.figure(figsize=(5, 5))
+    nTR = bound_averages.shape[1]
+    fig, ax = plt.subplots(figsize=(5,5))
+    plt.tick_params(axis='x', top=False, labeltop=False)
+
+    sorted_arr = np.sort(bound_averages, axis=2)
+    ax.fill_between(range(7),
+                    sorted_arr[0,7:14,50]-sorted_arr[1,7:14,50],
+                    sorted_arr[0,7:14,-50]-sorted_arr[1,7:14,-50], alpha=0.5, color="red")
+
+    ticks = [i for i in range(0, 7)]
+    ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
+    ax.set_ylim([-0.5,0.5])
+    ax.set_xlim([0,6])
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
+    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5, label="event boundaries (hum annotated)")
+    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+
+    # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
+    # btw corr of TRxTR matrices, all TRs predicted-luminance
+    # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
     plt.show()
