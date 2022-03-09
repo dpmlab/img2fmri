@@ -1,43 +1,37 @@
+import os
+import glob
+import pickle
+from pathlib import Path
+
+import zipfile
+import wget
+from natsort import natsorted
+from tqdm import tqdm, trange
+from PIL import Image
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
 from matplotlib.collections import PatchCollection
-from matplotlib.legend_handler import HandlerTuple
 import pandas as pd
 from sklearn.linear_model import Ridge
-from joblib import dump, load
 from scipy import stats
-import h5py
 
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.autograd import Variable
-from PIL import Image
-
-from pathlib import Path
-import argparse
-import os
-import glob
-import pickle
 
 import nibabel as nib
 from nipype.interfaces import afni
 from nipype.interfaces import fsl
 
-from natsort import natsorted
-
-import zipfile
-import wget
-
 from utils import get_subj_overlap, regressor_to_TR
 
-from tqdm import tqdm, trange
 
 ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
 TWINSET_CATEGORIES = ['animals', 'objects', 'scenes', 'people', 'faces']
-PC_EVENT_BOUNDS = [  0,  12,  26,  44,  56,  71,  81,  92, 104, 119, 123, 136, 143, 151]
+PC_EVENT_BOUNDS = [0, 12, 26, 44, 56, 71, 81, 92, 104, 119, 123, 136, 143, 151]
 
 def generate_activations(input_dir):
     output = f"temp/activations/"
@@ -65,7 +59,7 @@ def generate_activations(input_dir):
         layer_extractor = torch.nn.Sequential(*list(model.children())[:-1])
         feature_vec = layer_extractor(t_img).data.numpy().squeeze()
         feature_vec = feature_vec.flatten()
-        
+
         # Save image
         image_name = Path(filename).stem
         np.save(f"{output}{image_name}.npy", feature_vec)
@@ -99,24 +93,25 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
                     brain = y_pred_brain[0]
 
                     # Get left hemisphere
-                    T1_mask_nib = nib.load(f"derivatives/bool_masks/derivatives_spm_sub-CSI{subj+1}" \
-                                        f"_sub-CSI{subj+1}_mask-LH{roi}.nii.gz")
+                    T1_mask_nib = nib.load(f"derivatives/bool_masks/derivatives_spm_sub-"\
+                                        f"CSI{subj+1}_sub-CSI{subj+1}_mask-LH{roi}.nii.gz")
                     T1_mask_shape = T1_mask_nib.header.get_data_shape()[0:3]
                     LH_T1_mask = T1_mask_nib.get_fdata() > 0  # 3D boolean array
 
                     # Get right hemisphere
-                    T1_mask_nib = nib.load(f"derivatives/bool_masks/derivatives_spm_sub-CSI{subj+1}" \
-                                        f"_sub-CSI{subj+1}_mask-RH{roi}.nii.gz")                            
+                    T1_mask_nib = nib.load(f"derivatives/bool_masks/derivatives_spm_sub-"\
+                                        f"CSI{subj+1}_sub-CSI{subj+1}_mask-RH{roi}.nii.gz")
                     RH_T1_mask = T1_mask_nib.get_fdata() > 0  # 3D boolean array
 
                     # Initialize subj's 3d volume if first time through
-                    if (roi_idx == 0):
+                    if roi_idx == 0:
                         subj_brain = np.empty(T1_mask_shape)
-                        subj_brain[:, :, :] = np.NaN  
+                        subj_brain[:, :, :] = np.NaN
 
                     # LH Nanmean
-                    a = np.array([subj_brain[LH_T1_mask], 
-                                brain[:int(shape_array[subj][ALL_ROIS.index(roi)][0])]]) # nanmean of new w existing
+                    # nanmean of new w existing
+                    a = np.array([subj_brain[LH_T1_mask],
+                                brain[:int(shape_array[subj][ALL_ROIS.index(roi)][0])]])
                     a = np.nanmean(a, axis=0)
                     subj_brain[LH_T1_mask] = a
 
@@ -129,7 +124,7 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
                 nib.save(nib.Nifti1Image(subj_brain, affine=T1_mask_nib.affine),
                         f'temp/subj_space/sub{subj+1}_{Path(filename).stem}.nii.gz')
     # tqdm.write(f"Saved: Predictions into subjects' brains")
-    # Probably should save these for the future in a specific folder to this run, so don't do 
+    # Probably should save these for the future in a specific folder to this run, so don't do
     # everything everytime
 
 
@@ -182,7 +177,7 @@ def smooth_brains(sig=1):
 #         if Path(filename).suffix != ".jpg" and Path(filename).suffix != ".png":
 #             # print(f"skipping {filename} with suffix: {Path(filename).suffix}")
 #             continue
-            
+
 #         stem = Path(filename).stem
 #         subj_mask_nib = nib.load(f'temp/mni_s/sub1_{stem}.nii.gz')
 #         subj_brain = np.full((subj_mask_nib.shape), np.nan)
@@ -191,7 +186,7 @@ def smooth_brains(sig=1):
 #             filename = f'temp/mni_s/sub{subj}_{stem}.nii.gz'
 #             brain = nib.load(filename).get_fdata()
 #             subj_brain = np.nansum([subj_brain, brain], axis=0)
-        
+
 #         subj_brain /= 3 # num_subjects
 #         nib.save(nib.Nifti1Image(subj_brain, affine=subj_mask_nib.affine),
 #                                  f'{output_dir}/{stem}.nii.gz')
@@ -205,11 +200,11 @@ def average_subjects(input_dir, output_dir):
         if Path(filename).suffix != ".jpg" and Path(filename).suffix != ".png":
             # print(f"skipping {filename} with suffix: {Path(filename).suffix}")
             continue
-            
+
         stem = Path(filename).stem
         subj_mask_nib = nib.load(f'temp/mni_s/sub1_{stem}.nii.gz')
         im_brain = np.full((subj_mask_nib.shape), np.nan)
-        
+
         zscored_sum = np.zeros((np.count_nonzero(overlap)))
 
         for subj in range(1,4):
@@ -217,7 +212,7 @@ def average_subjects(input_dir, output_dir):
             brain = nib.load(filename).get_fdata()
             zscored_overlap = stats.zscore(brain[overlap])
             zscored_sum += zscored_overlap
-        
+
         group_avg = stats.zscore(zscored_sum)
         im_brain[overlap] = group_avg
 
@@ -245,7 +240,7 @@ def load_imgs(url):
 
 
 def make_directories():
-    temp_dirs = ['temp/activations', 'temp/subj_space', 
+    temp_dirs = ['temp/activations', 'temp/subj_space',
                  'temp/temp', 'temp/mni', 'temp/mni_s']
     for directory in temp_dirs:
         try:
@@ -261,13 +256,15 @@ def twinset_generate_group_correlations(output_dir):
     corr = np.zeros((156, 156))
     overlap = get_subj_overlap()
 
-    for i_pred, image_pred in enumerate(tqdm(range(1,157), desc='Generating correlations with group-averaged brains')):
+    for i_pred, image_pred in enumerate(tqdm(range(1,157), desc='Generating correlations with '\
+                                                                'group-averaged brains')):
         # if i_pred % 25 == 0 and i_pred > 0: print(f"completed {i_pred} images")
         pred_brain = nib.load(f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
-        
+
         for i_test, image_test in enumerate(range(1,157)):
-            true_brain = nib.load(f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz').get_fdata()
-            pred_overlap = pred_brain[overlap] 
+            filename = f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
+            true_brain = nib.load(filename).get_fdata()
+            pred_overlap = pred_brain[overlap]
             true_overlap = true_brain[overlap]
 
             pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0] #just get r, not p val
@@ -303,7 +300,7 @@ def twinset_random_group_permutations(n_shuffle=1000, print_vals=False):
 
     p = (count_over_real + 1)/(num_resample + 1)
     n = (stats.norm.sf((real_diff - np.mean(diffs))/ (np.std(diffs))))
-    
+
     if print_vals:
         print(f"Real difference:      {real_diff:.6f}")
         print(f"Mean null difference: {np.mean(diffs):.6f}")
@@ -324,7 +321,8 @@ def twinset_random_group_permutations(n_shuffle=1000, print_vals=False):
     ax.set_xlim(0.5,1.5)
     ax.set_xticklabels(["Group average"], fontsize=12)
     ax.set_ylabel("Diagonal - off-diagonal", fontsize=12)
-    ax.set_title("Difference between diagonal and off-diagonal \n for correlation matrix of real and predicted brains")
+    ax.set_title("Difference between diagonal and off-diagonal \n " \
+                 "for correlation matrix of real and predicted brains")
     max_y = max(diffs.max(), real_diff)
     # y_height = max(diffs.max(), real_diff) * 1.05
     # y_lower, y_upper = ax.get_ylim()
@@ -342,21 +340,24 @@ def twinset_generate_category_correlations(output_dir):
     corr = np.zeros((5,), dtype=object)
     overlap = get_subj_overlap()
 
-    for cat_idx, cat_range in enumerate([range(1,29), range(29,65), range(65,101), range(101, 125), range(125,157)]):
+    for cat_idx, cat_range in enumerate([range(1,29), range(29,65), range(65,101),
+                                         range(101, 125), range(125,157)]):
         cat_length = cat_range[-1] - cat_range[0] + 1
         cat_corr = np.zeros((cat_length, cat_length))
-        for i_pred, image_pred in enumerate(tqdm(cat_range, desc=f'Generating correlations for \'{TWINSET_CATEGORIES[cat_idx]}\'')):
+        tqdm_description = f'Generating correlations for \'{TWINSET_CATEGORIES[cat_idx]}\''
+        for i_pred, image_pred in enumerate(tqdm(cat_range, desc=tqdm_description)):
             pred_brain = nib.load(f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
             # if i_pred % 20 == 0: print(f"completed {i_pred} images")
-            
+
             for i_test, image_test in enumerate(cat_range):
-                true_brain = nib.load(f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz').get_fdata()
-                pred_overlap = pred_brain[overlap] 
+                filename = f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
+                true_brain = nib.load(filename).get_fdata()
+                pred_overlap = pred_brain[overlap]
                 true_overlap = true_brain[overlap]
 
                 pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0] #just get r, not p val
                 cat_corr[i_pred, i_test] = pearson_r
-                
+
         corr[cat_idx] = cat_corr
         # print(f"Completed category: {TWINSET_CATEGORIES[cat_idx]}")
 
@@ -392,7 +393,7 @@ def twinset_random_category_permutations(n_shuffle=1000, print_vals=False):
             diffs[i] = np.diag(df).mean() - df[offdiag].mean()
             if np.diag(df).mean() - df[offdiag].mean() >= real_difference:
                 count_over_real += 1
-        
+
         p = (count_over_real + 1)/(num_resample + 1)
         n = (stats.norm.sf((real_difference - np.mean(diffs))/ (np.std(diffs))))
         shuffled_diffs[c] = diffs
@@ -413,9 +414,10 @@ def twinset_random_category_permutations(n_shuffle=1000, print_vals=False):
         p.set_edgecolor(colors[i])
         p.set_facecolor(colors[i])
         p.set_alpha(.5)
-    
+
     ax.scatter(range(1,6), real_diffs, marker='o', color='k', edgecolors='k', label='Real matrix')
-    ax.set_title("Difference between diagonal and off-diagonal \n for correlation matrix of real and predicted brains")
+    ax.set_title("Difference between diagonal and off-diagonal \n" \
+                 " for correlation matrix of real and predicted brains")
     ax.set_ylabel("Diagonal - off-diagonal", fontsize=12)
     ax.set_xticks(range(1,6))
     ax.set_xticklabels(categories, fontsize=12)
@@ -444,21 +446,23 @@ def twinset_generate_participant_correlations(output_dir):
     with tqdm(total=total_num_images, desc='Generating correlations per participant') as pbar:
         for subj in range(0,15):
             subj_corr = np.zeros((num_images, num_images))
-            
-            for i_pred, image_pred in enumerate(range(1,num_images+1)): #  TODO no need for enumerates since ranges
+
+            #  TODO no need for enumerates since ranges
+            for i_pred, image_pred in enumerate(range(1,num_images+1)):
                 pbar.update(1)
                 # if i_pred % 20 == 0: print(f"completed {i_pred} images")
-                    
-                pred_brain = nib.load(f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
+                pred_filename = f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz'
+                pred_brain = nib.load(pred_filename).get_fdata()
                 for i_test, image_test in enumerate(range(1,num_images+1)):
-                    filename = f'../twinset/subj{"{:02d}".format(subj+1)}/r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
+                    filename = f'../twinset/subj{"{:02d}".format(subj+1)}/' \
+                                'r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
                     true_brain = nib.load(filename).get_fdata()
-                    pred_overlap = pred_brain[overlap] 
+                    pred_overlap = pred_brain[overlap]
                     true_overlap = true_brain[overlap]
 
                     pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0] #just get r, not p val
                     subj_corr[i_pred, i_test] = pearson_r
-                    
+
             corr[subj] = subj_corr
 
     pkl_filename = f"../twinset/per_subj_correlations.pkl"
@@ -522,20 +526,23 @@ def twinset_random_participant_permutations(n_shuffle=1000, print_vals=False):
     ax.set_ylabel("Diagonal - off-diagonal", fontsize=12)
     ax.set_xlabel("Participant", fontsize=12)
     ax.legend(loc="lower right", fontsize=12)
-    ax.set_title("Difference between diagonal and off-diagonal \n for correlation matrix of real and predicted brains")
-    
+    ax.set_title("Difference between diagonal and off-diagonal \n"\
+                " for correlation matrix of real and predicted brains")
+
     same_height = True
     for i, xtick, p in zip(range(num_cat), ax.get_xticks(), pstats[:,0]):
-        if same_height: 
+        if same_height:
             max_y = max(real_diffs[:].max(), shuffled_diffs[:].max())
         else:
             max_y = max(real_diffs[i].max(), shuffled_diffs[i].max())
-        
+
         plot_significance_asterisk(xtick, max_y, p, fs=12)
 
 
+# TODO modified from
+# https://stackoverflow.com/questions/11517986/
+# indicating-the-statistically-significant-difference-in-bar-graph
 def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
-    
     if type(data) is str:
         text = data
     else:
@@ -558,7 +565,7 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
 
 #         if len(text) == 0:
 #             text = 'n. s.'
-            
+
     y = max_y * 1.05
     ax = plt.gca()
     y_lower, y_upper = ax.get_ylim()
@@ -566,86 +573,23 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
         ax.set_ylim(y_lower, y_upper * 1.08)
     ax.text(x, y, text, ha='center', fontsize=fs)
 
-# pulled from https://stackoverflow.com/questions/11517986/indicating-the-statistically-significant-difference-in-bar-graph
-def barplot_annotate_brackets(num1, num2, data, center, height, yerr=None, dh=.05, barh=.05, fs=None, maxasterix=None):
-    """ 
-    Annotate barplot with p-values.
-
-    :param num1: number of left bar to put bracket over
-    :param num2: number of right bar to put bracket over
-    :param data: string to write or number for generating asterixes
-    :param center: centers of all bars (like plt.bar() input)
-    :param height: heights of all bars (like plt.bar() input)
-    :param yerr: yerrs of all bars (like plt.bar() input)
-    :param dh: height offset over bar / bar + yerr in axes coordinates (0 to 1)
-    :param barh: bar height in axes coordinates (0 to 1)
-    :param fs: font size
-    :param maxasterix: maximum number of asterixes to write (for very small p-values)
-    """
-
-    if type(data) is str:
-        text = data
-    else:
-        # * is p < 0.05
-        # ** is p < 0.005
-        # *** is p < 0.0005
-        # etc.
-        text = ''
-        p = .05
-
-        while data < p:
-            text += '*'
-            p /= 10.
-
-            if maxasterix and len(text) == maxasterix:
-                break
-
-        if len(text) == 0:
-            text = 'n. s.'
-
-    lx, ly = center[num1], height[num1]
-    rx, ry = center[num2], height[num2]
-
-    if yerr:
-        ly += yerr[num1]
-        ry += yerr[num2]
-
-    ax_y0, ax_y1 = plt.gca().get_ylim()
-    dh *= (ax_y1 - ax_y0)
-    barh *= (ax_y1 - ax_y0)
-
-    y = max(ly, ry) + dh
-
-    barx = [lx, lx, rx, rx]
-    bary = [y, y+barh, y+barh, y]
-    mid = ((lx+rx)/2, y+barh+.0001)
-#     mid = ((lx+rx)/2, y+barh)
-
-    plt.plot(barx, bary, c='black')
-
-    kwargs = dict(ha='center', va='bottom')
-    if fs is not None:
-        kwargs['fontsize'] = fs
-
-    plt.text(*mid, text, **kwargs)
-
 # define an object that will be used by the legend
 class MulticolorPatch(object):
     def __init__(self, colors, alpha=1):
         self.colors = colors
         self.alpha = alpha
-        
+
 # define a handler for the MulticolorPatch object
 class MulticolorPatchHandler(object):
     def legend_artist(self, legend, orig_handle, fontsize, handlebox):
         width, height = handlebox.width, handlebox.height
         patches = []
         for i, c in enumerate(orig_handle.colors):
-            patches.append(plt.Rectangle([width/len(orig_handle.colors) * i - handlebox.xdescent, 
+            patches.append(plt.Rectangle([width/len(orig_handle.colors) * i - handlebox.xdescent,
                                           -handlebox.ydescent],
                            width / len(orig_handle.colors),
-                           height, 
-                           facecolor=c, 
+                           height,
+                           facecolor=c,
                            edgecolor='none',
                            alpha=orig_handle.alpha))
 
@@ -698,8 +642,8 @@ def pc_bootstrapped_pred_lum(bound_averages):
 
     ticks = [i for i in range(0, 21)][::2]
     ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
-    ax.set_ylim([-1,1])
-    ax.set_xlim([0,20])
+    ax.set_ylim([-1, 1])
+    ax.set_xlim([0, 20])
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
@@ -711,7 +655,7 @@ def pc_bootstrapped_pred_lum(bound_averages):
     # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
     plt.show()
 
-def pc_bootstrapped_pred_lum_3TRs(bound_averages):
+def pc_bootstrapped_pred_lum_3TRs(bound_averages, y_min=-0.5, y_max=0.5):
     nTR = bound_averages.shape[1]
     fig, ax = plt.subplots(figsize=(5,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
@@ -725,7 +669,7 @@ def pc_bootstrapped_pred_lum_3TRs(bound_averages):
 
     ticks = [i for i in range(0, 7)]
     ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
-    ax.set_ylim([-0.5,0.5])
+    ax.set_ylim([y_min,y_max])
     ax.set_xlim([0,6])
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
@@ -778,7 +722,8 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5, label="event boundaries (hum annotated)")
+    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red',
+    #            alpha=0.5, label="event boundaries (hum annotated)")
     ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -815,11 +760,11 @@ def generate_bootstrapped_correlations(true, pred, lum, TR_band=None,
 
     ##------- load bootstraps
         avg = nib.load(f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz').get_fdata()
-        # if i % 10 == 0: print(f"loaded bootstrap_{b}")    
+        # if i % 10 == 0: print(f"loaded bootstrap_{b}")
         # get TRxTR
         a = avg[:,:,:,10:] # cut intro TRs
         aTRTR = np.corrcoef(a[overlap].T)
-        
+
     ##------- correlations
         for t in range(nTR):
             # without band
@@ -830,18 +775,21 @@ def generate_bootstrapped_correlations(true, pred, lum, TR_band=None,
                 corr[i,0,t] = stats.pearsonr(pred[t][band[t]], aTRTR[t][band[t]])[0]
                 corr[i,1,t] = stats.pearsonr(lum[t][band[t]], aTRTR[t][band[t]])[0]
 
-    # end up with num_bootstraps x 2 
+    # end up with num_bootstraps x 2
     # make new array for num_bootstraps x num_boundaries x 2
-    # then go through each bootstrap and do boundary triggered average for that bootstrap for lum and for pred
-    # then overlap them 
+    # then go through each bootstrap and do boundary triggered average for that bootstrap for
+    # lum and for pred then overlap them
 
     return corr
 
 def get_TR_band(bandwidth, nTR):
+    """
+    Returns a 1D bool array for indexing into specific bands around diagonal
+    """
     upt = ~np.triu(np.ones(nTR).astype(bool), bandwidth + 1)
     lot = np.triu(np.ones(nTR).astype(bool), -bandwidth)
     notdiag = 1-np.diag(np.ones(nTR)).astype(bool)
-    band = upt & lot 
+    band = upt & lot
     band = band & notdiag
     band = band.astype(bool)
     return band
@@ -855,13 +803,16 @@ def generate_boundary_triggered_averages(corr, skip_other_boundaries=True):
     num_boundary_bootstraps = 10
     rand_bounds = np.zeros((num_bootstraps * num_boundary_bootstraps, len(PC_EVENT_BOUNDS[1:])))
     for i in range(num_bootstraps * num_boundary_bootstraps):
-        rand_bounds[i,:] = np.random.choice(PC_EVENT_BOUNDS[1:], size=len(PC_EVENT_BOUNDS[1:]),replace=True)
-            
+        rand_bounds[i,:] = np.random.choice(PC_EVENT_BOUNDS[1:],
+                                            size=len(PC_EVENT_BOUNDS[1:]),
+                                            replace=True)
+
     # bound_averages = np.zeros((num_bootstraps * num_boundary_bootstraps,2,21))
     bound_averages = np.full((2,21,num_bootstraps * num_boundary_bootstraps), np.nan)
     window = range(-10, 11)
 
-    for s in tqdm(range(num_bootstraps * num_boundary_bootstraps), desc='Generating bootstrapped boundaries'): 
+    description = 'Generating bootstrapped boundaries'
+    for s in tqdm(range(num_bootstraps * num_boundary_bootstraps), desc=description):
         brain_idx = s % num_bootstraps
     #     print(brain_idx)
         for i, tr in enumerate(window):
@@ -871,18 +822,19 @@ def generate_boundary_triggered_averages(corr, skip_other_boundaries=True):
             for b in rand_bounds[s]:
                 if b+tr >= nTR:
                     continue
-                
+
                 if skip_other_boundaries:
                     # check to see if hitting ±2 TRs from a different boundary
                     hum_bounds_temp = np.array(PC_EVENT_BOUNDS[1:])
-                    hum_bounds_temp = np.delete(hum_bounds_temp, np.where(hum_bounds_temp == b)) # ignore our boundary of interest
-                    hum_bounds_temp = np.concatenate((hum_bounds_temp-2, hum_bounds_temp-1, 
+                    # ignore our boundary of interest vv
+                    hum_bounds_temp = np.delete(hum_bounds_temp, np.where(hum_bounds_temp == b))
+                    hum_bounds_temp = np.concatenate((hum_bounds_temp-2, hum_bounds_temp-1,
                                                     hum_bounds_temp, hum_bounds_temp+1,
                                                     hum_bounds_temp+2))
                     if b+tr in hum_bounds_temp:
         #                 print("skipping at", b+tr)
                         continue
-                    
+
                 pred_avg += corr[brain_idx,0,b.astype(int)+tr]
                 lum_avg  += corr[brain_idx,1,b.astype(int)+tr]
                 count_bounds += 1
@@ -900,7 +852,7 @@ def generate_boundary_triggered_averages(corr, skip_other_boundaries=True):
                 lum_avg = 0
             bound_averages[0,i,s] = pred_avg
             bound_averages[1,i,s] = lum_avg
-    
+
     return bound_averages
 
 
@@ -917,7 +869,8 @@ def pc_pred_lum_timecourse(corr):
     axes.set_ylim([-1,1])
     axes.set_xlim([0,nTR])
     axes.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    axes.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='purple', alpha=0.5, label="event boundaries (hum annotated)")
+    axes.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='purple', alpha=0.5,
+                label="event boundaries (hum annotated)")
 
     h,l = axes.get_legend_handles_labels()
     h.append(Line2D([0], [0], color='green', lw=1))
@@ -926,7 +879,8 @@ def pc_pred_lum_timecourse(corr):
     l.append('corr(pred, true)')
     h.reverse(); l.reverse()
     axes.legend(h,l,fontsize='large',loc='lower right')
-    # plt.title("Row by row correlation from TRxTR matrices, all TRs, 100 bootstraps, pred(blue) lum(green)")
+    # plt.title("Row by row correlation from TRxTR matrices, " \
+    #           " all TRs, 100 bootstraps, pred(blue) lum(green)")
     plt.show()
 
 def pc_difference_timecourse(corr):
@@ -936,19 +890,19 @@ def pc_difference_timecourse(corr):
     plt.tick_params(axis='x', top=False, labeltop=False)
     for s in range(num_bootstraps):
         plt.plot(corr[s,0] - corr[s,1], color='red', alpha=0.05)
-        
+
     axes = plt.gca()
     axes.set_ylim([-1,1])
     axes.set_xlim([0,nTR])
     plt.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='purple', alpha=0.5, label="event boundaries (hum annotated)")
+    plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='purple', alpha=0.5,
+               label="event boundaries (hum annotated)")
 
     h,l = axes.get_legend_handles_labels()
     h.append(Line2D([0], [0], color='red', lw=1))
     l.append('corr(pred, true) - corr(lum, true)')
     h.reverse(); l.reverse()
     axes.legend(h,l,fontsize='large',loc='lower right')
-    # plt.title("Row by row correlation from TRxTR matrices, predicted - real, all TRs, 100 bootstraps")
     plt.show()
 
 
@@ -987,13 +941,13 @@ def pc_bootstrapped_pred_lum_3TRs_conf_intervals(bound_averages):
     plt.tick_params(axis='x', top=False, labeltop=False)
 
     sorted_arr = np.sort(bound_averages, axis=2)
-    ax.fill_between(range(7), sorted_arr[0,7:14,50], sorted_arr[0,7:14,-50], alpha=0.5, color="blue")
-    ax.fill_between(range(7), sorted_arr[1,7:14,50], sorted_arr[1,7:14,-50], alpha=0.5, color="green")
+    ax.fill_between(range(7), sorted_arr[0,7:14,50], sorted_arr[0,7:14,-50], alpha=0.5, color="b")
+    ax.fill_between(range(7), sorted_arr[1,7:14,50], sorted_arr[1,7:14,-50], alpha=0.5, color="g")
 
 
     ticks = [i for i in range(0, 7)]
     ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
-    ax.set_ylim([-0.5,0.5])
+    ax.set_ylim([-0.5,1])
     ax.set_xlim([0,6])
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
@@ -1050,7 +1004,8 @@ def pc_bootstrapped_difference_3TRs_conf_intervals(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5, label="event boundaries (hum annotated)")
+    # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5,
+    #            label="event boundaries (hum annotated)")
     ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
