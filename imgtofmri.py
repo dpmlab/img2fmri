@@ -18,8 +18,8 @@ from sklearn.linear_model import Ridge
 from scipy import stats
 
 import torch
-import torchvision.models as models
-import torchvision.transforms as transforms
+from torchvision import models
+from torchvision import transforms
 from torch.autograd import Variable
 
 import nibabel as nib
@@ -65,11 +65,12 @@ def generate_activations(input_dir):
         np.save(f"{output}{image_name}.npy", feature_vec)
         img.close()
 
-    num_images = len(glob.glob(f"{input_dir}/*.png") + glob.glob(f"{input_dir}/*.jpg"))
+    # num_images = len(glob.glob(f"{input_dir}/*.png") + glob.glob(f"{input_dir}/*.jpg"))
     # tqdm.write(f"Saved: CNN activations of {num_images} images")
 
 
 def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
+    if roi_list is None: return
     # roi_list = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
     # roi_list = ["LOC", "RSC", "PPA"]
     ridge_p_grid = {'alpha': np.logspace(1, 5, 10)}
@@ -546,12 +547,14 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
     if type(data) is str:
         text = data
     else:
+        # † (\u2020) is <0.075
         # * is p < 0.05
         # ** is p < 0.01
         # *** is p < 0.001
         # etc.
-        text = ''
-        p = .05
+        text = "\u2020" if data < 0.075 and data > 0.05 else ""
+
+        p = .05 
         if data < p:
             text += "*"
 
@@ -688,8 +691,9 @@ def pc_bootstrapped_difference(bound_averages):
     fig, ax = plt.subplots(figsize=(7,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
-    sorted_arr = np.sort(bound_averages, axis=2)
-    ax.plot(bound_averages[0]-bound_averages[1], color='red', alpha = 0.008,)
+    # sorted_arr = np.sort(bound_averages, axis=2)
+    diffs = bound_averages[0]-bound_averages[1]
+    ax.plot(diffs, color='red', alpha = 0.008,)
 
     ticks = [i for i in range(0, 21)][::2]
     ticklabels = [f'{i:.0f}' for i in range(-10, 11)][::2]
@@ -698,8 +702,21 @@ def pc_bootstrapped_difference(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    
+    max_y = diffs[:].max()
+    ax.vlines(10, -1, max_y-0.03, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, max_y+0.125, 1, linestyle='dashed', color='grey', alpha=1)
+     
+    same_height = True
+    for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
+        if same_height:
+            max_y = diffs[:].max()
+        else:
+            max_y = diffs[i].max()
+        plot_significance_asterisk(i, max_y, p, fs=14)
 
+    # print(num_below_zero(diffs))
+    # print(ax.get_xticks())
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted-luminance
@@ -712,8 +729,9 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     fig, ax = plt.subplots(figsize=(5,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
-    sorted_arr = np.sort(bound_averages, axis=2)
-    ax.plot(bound_averages[0,7:14]-bound_averages[1,7:14], color='red', alpha = 0.008,)
+    # sorted_arr = np.sort(bound_averages, axis=2)
+    diffs = bound_averages[0,7:14]-bound_averages[1,7:14]
+    ax.plot(diffs, color='red', alpha = 0.008,)
 
     ticks = [i for i in range(0, 7)]
     ticklabels = [f'{i:.0f}' for i in range(-3, 4)]
@@ -724,7 +742,17 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red',
     #            alpha=0.5, label="event boundaries (hum annotated)")
-    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    max_y = diffs[:].max()
+    ax.vlines(3, -1, max_y, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(3, max_y+0.07, 1, linestyle='dashed', color='grey', alpha=1)
+
+    same_height = True
+    for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
+        if same_height:
+            max_y = diffs[:].max()
+        else:
+            max_y = diffs[i].max()
+        plot_significance_asterisk(i, max_y, p, fs=14)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted-luminance
@@ -1012,3 +1040,14 @@ def pc_bootstrapped_difference_3TRs_conf_intervals(bound_averages):
     # btw corr of TRxTR matrices, all TRs predicted-luminance
     # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
     plt.show()
+
+def num_below_zero(diffs):
+    len_diffs = diffs.shape[0]
+
+    num_below_zero = np.zeros((len_diffs))
+    for i in range(0, len_diffs):
+        for b in range(1000):
+            if diffs[i,b] < 0:
+                num_below_zero[i] += 1
+
+    return num_below_zero/1000
