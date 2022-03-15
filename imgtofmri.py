@@ -704,8 +704,9 @@ def pc_bootstrapped_difference(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     
     max_y = diffs[:].max()
+    # ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
     ax.vlines(10, -1, max_y-0.03, linestyle='dashed', color='grey', alpha=1)
-    ax.vlines(10, max_y+0.125, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, max_y+0.12, 1, linestyle='dashed', color='grey', alpha=1)
      
     same_height = True
     for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
