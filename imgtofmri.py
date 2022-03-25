@@ -704,9 +704,7 @@ def pc_bootstrapped_difference(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     
     max_y = diffs[:].max()
-    # ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
-    ax.vlines(10, -1, max_y-0.03, linestyle='dashed', color='grey', alpha=1)
-    ax.vlines(10, max_y+0.12, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
      
     same_height = True
     for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
@@ -743,9 +741,8 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red',
     #            alpha=0.5, label="event boundaries (hum annotated)")
-    max_y = diffs[:].max()
-    ax.vlines(3, -1, max_y, linestyle='dashed', color='grey', alpha=1)
-    ax.vlines(3, max_y+0.07, 1, linestyle='dashed', color='grey', alpha=1)
+
+    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
 
     same_height = True
     for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
@@ -760,7 +757,11 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
     plt.show()
 
-def generate_bootstrapped_correlations(true, pred, lum, TR_band=None,
+def generate_bootstrapped_correlations(true, 
+                                       pred, 
+                                       lum, 
+                                       TR_band=None,
+                                       num_bootstraps=100,
                                        true_dir="../pc_true/preprocessed_data"):
     if TR_band != None:
         band = get_TR_band(TR_band, nTR=true.shape[0])
@@ -772,7 +773,7 @@ def generate_bootstrapped_correlations(true, pred, lum, TR_band=None,
     init_subj_nib = nib.load(init_subj_TRs)
     overlap = get_subj_overlap()
 
-    num_bootstraps = 100
+    # num_bootstraps = 100
     nTR = lum.shape[0]
     notdiag = 1-np.diag(np.ones(158)).astype(bool)
     notdiag = notdiag.astype(bool)
@@ -823,13 +824,14 @@ def get_TR_band(bandwidth, nTR):
     band = band.astype(bool)
     return band
 
-def generate_boundary_triggered_averages(corr, skip_other_boundaries=True):
+def generate_boundary_triggered_averages(corr,
+                                         num_boundary_bootstraps=10,
+                                         skip_other_boundaries=True):
     # Modified apr 29th 2021 for bootstrapping boundaries
     # May 13 changing from 1000x2x21 to 2x21x
 
     num_bootstraps = corr.shape[0]
     nTR = corr.shape[-1]
-    num_boundary_bootstraps = 10
     rand_bounds = np.zeros((num_bootstraps * num_boundary_bootstraps, len(PC_EVENT_BOUNDS[1:])))
     for i in range(num_bootstraps * num_boundary_bootstraps):
         rand_bounds[i,:] = np.random.choice(PC_EVENT_BOUNDS[1:],
@@ -1044,11 +1046,12 @@ def pc_bootstrapped_difference_3TRs_conf_intervals(bound_averages):
 
 def num_below_zero(diffs):
     len_diffs = diffs.shape[0]
+    num_bootstraps = diffs.shape[1]
 
     num_below_zero = np.zeros((len_diffs))
     for i in range(0, len_diffs):
-        for b in range(1000):
+        for b in range(num_bootstraps):
             if diffs[i,b] < 0:
                 num_below_zero[i] += 1
 
-    return num_below_zero/1000
+    return (num_below_zero+1) / (num_bootstraps+1)
