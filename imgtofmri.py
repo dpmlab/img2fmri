@@ -1,6 +1,7 @@
 import os
 import glob
 import pickle
+import joblib
 from pathlib import Path
 
 import zipfile
@@ -33,8 +34,9 @@ ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
 TWINSET_CATEGORIES = ['animals', 'objects', 'scenes', 'people', 'faces']
 PC_EVENT_BOUNDS = [0, 12, 26, 44, 56, 71, 81, 92, 104, 119, 123, 136, 143, 151]
 
-def generate_activations(input_dir):
-    output = f"temp/activations/"
+def generate_activations(input_dir, output_dir=""):
+    if output_dir == "": 
+        output_dir = f"temp/activations/"
 
     # Default input image transformations for ImageNet
     scaler = transforms.Resize((224, 224))
@@ -62,7 +64,7 @@ def generate_activations(input_dir):
 
         # Save image
         image_name = Path(filename).stem
-        np.save(f"{output}{image_name}.npy", feature_vec)
+        np.save(f"{output_dir}{image_name}.npy", feature_vec)
         img.close()
 
     # num_images = len(glob.glob(f"{input_dir}/*.png") + glob.glob(f"{input_dir}/*.jpg"))
@@ -75,7 +77,7 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
     # roi_list = ["LOC", "RSC", "PPA"]
     ridge_p_grid = {'alpha': np.logspace(1, 5, 10)}
 
-    model_dir = f"models/"
+    # model_dir = f"new_models/"
     shape_array = np.load('derivatives/shape_array.npy', allow_pickle=True)
 
     # For each subject, for each input file, predict all ROIs for that subject and save prediction
@@ -89,7 +91,7 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
                 for roi_idx, roi in enumerate(roi_list):
                     # print(roi_idx, roi, f"index in list: {ALL_ROIS.index(roi)}")
 
-                    model = load(f'models/subj{subj+1}_{roi}_model.pkl')
+                    model = joblib.load(f'models/subj{subj+1}_{roi}_model.pkl')#TODO TODO 
                     y_pred_brain = model.predict([actv])
                     brain = y_pred_brain[0]
 
@@ -456,7 +458,7 @@ def twinset_generate_participant_correlations(output_dir):
                 pred_brain = nib.load(pred_filename).get_fdata()
                 for i_test, image_test in enumerate(range(1,num_images+1)):
                     filename = f'../twinset/subj{"{:02d}".format(subj+1)}/' \
-                                'r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
+                               f'r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
                     true_brain = nib.load(filename).get_fdata()
                     pred_overlap = pred_brain[overlap]
                     true_overlap = true_brain[overlap]
@@ -565,16 +567,19 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
 
             if maxasterix and len(text) == maxasterix:
                 break
+    
+    if text != "":
+        y = max_y * 1.05
+        ax = plt.gca()
+        y_lower, y_upper = ax.get_ylim()
+        if y * 1.08 > y_upper:
+            ax.set_ylim(y_lower, y_upper * 1.08)
+        ax.text(x, y, text, ha='center', fontsize=fs)
+        xticks = ax.get_xticks()
+        # print((x-0.49)/xticks[-1], (x+0.5)/xticks[-1])
+        ax.axhline(y*0.95, (x-0.425)/xticks[-1], (x+0.425)/xticks[-1], linestyle='-', color='black')
 
-#         if len(text) == 0:
-#             text = 'n. s.'
-
-    y = max_y * 1.05
-    ax = plt.gca()
-    y_lower, y_upper = ax.get_ylim()
-    if y * 1.08 > y_upper:
-        ax.set_ylim(y_lower, y_upper * 1.08)
-    ax.text(x, y, text, ha='center', fontsize=fs)
+        
 
 # define an object that will be used by the legend
 class MulticolorPatch(object):
@@ -650,7 +655,7 @@ def pc_bootstrapped_pred_lum(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -677,7 +682,7 @@ def pc_bootstrapped_pred_lum_3TRs(bound_averages, y_min=-0.5, y_max=0.5):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(3, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -704,10 +709,10 @@ def pc_bootstrapped_difference(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     
     max_y = diffs[:].max()
-    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, -1, 1, linestyle='dashed', color='purple', alpha=1)
      
     same_height = True
-    for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
+    for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
         if same_height:
             max_y = diffs[:].max()
         else:
@@ -742,10 +747,10 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
     # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red',
     #            alpha=0.5, label="event boundaries (hum annotated)")
 
-    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(3, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     same_height = True
-    for i, p in zip(range(len(diffs)), num_below_zero(diffs)):
+    for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
         if same_height:
             max_y = diffs[:].max()
         else:
@@ -784,7 +789,7 @@ def generate_bootstrapped_correlations(true,
     #------- save bootstrap brains if don't exist
         if glob.glob(f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz') == []:
             subj_sample = np.random.choice(range(123,156), size=33, replace=True)
-            avg = return_average_subjects(subj_sample)
+            avg = return_average_subjects(subj_sample) # TODO this won't work rn not defined
             nib.save(nib.Nifti1Image(avg, affine=init_subj_nib.affine),
                     f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz')
 
@@ -958,7 +963,7 @@ def pc_bootstrapped_pred_lum_conf_intervals(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -983,7 +988,7 @@ def pc_bootstrapped_pred_lum_3TRs_conf_intervals(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(3, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -1009,7 +1014,7 @@ def pc_bootstrapped_difference_conf_intervals(bound_averages):
     ax.set_xticks(ticks)
     ax.set_xticklabels(ticklabels)
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
-    ax.vlines(10, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(10, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # plt.legend(fontsize='large', loc='lower right')
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
@@ -1037,14 +1042,14 @@ def pc_bootstrapped_difference_3TRs_conf_intervals(bound_averages):
     ax.axhline(0, 0, nTR, linestyle='dashed', color='grey')
     # plt.vlines(PC_EVENT_BOUNDS, -.5,.5, linestyle='dashed', color='red', alpha=0.5,
     #            label="event boundaries (hum annotated)")
-    ax.vlines(3, -1, 1, linestyle='dashed', color='grey', alpha=1)
+    ax.vlines(3, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted-luminance
     # skipping ±2TRs from bounds\n""", y=1.03, fontsize=14)
     plt.show()
 
-def num_below_zero(diffs):
+def num_bootstraps_below_zero(diffs):
     len_diffs = diffs.shape[0]
     num_bootstraps = diffs.shape[1]
 
