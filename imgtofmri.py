@@ -577,9 +577,68 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
         ax.text(x, y, text, ha='center', fontsize=fs)
         xticks = ax.get_xticks()
         # print((x-0.49)/xticks[-1], (x+0.5)/xticks[-1])
-        ax.axhline(y*0.95, (x-0.425)/xticks[-1], (x+0.425)/xticks[-1], linestyle='-', color='black')
+        # ax.axhline(y*0.95, (x-0.425)/xticks[-1], (x+0.425)/xticks[-1], linestyle='-', color='black')
 
-        
+# TODO cleanup...
+def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
+    # † (\u2020) is <0.075
+    # * is p < 0.05
+    # ** is p < 0.01
+    # *** is p < 0.001
+    # etc.
+    asterisks = np.empty((len(data)),dtype=object)
+    for i, d in enumerate(data):
+        text = "\u2020" if d < 0.075 and d > 0.05 else ""
+
+        p = .05 
+        if d < p:
+            text += "*"
+
+        p = 0.01
+        while d < p:
+            text += '*'
+            p /= 10.
+
+            if maxasterix and len(text) == maxasterix:
+                break
+        asterisks[i] = text
+
+    same_ticks = {}
+    i = 0
+    while i < len(asterisks):
+        a = asterisks[i]
+        if a == "":
+            i += 1
+            continue
+        if a not in same_ticks:
+            same_ticks[a] = list()
+
+        j = i + 1
+        same_indices = [ i ]
+        while j < len(asterisks):
+            i = j
+            if asterisks[j] == a:
+                same_indices.append(j)
+                j += 1
+            else: 
+                break
+        same_ticks[a].append(same_indices)
+
+    for t in same_ticks:
+        for l_of_t in same_ticks[t]:
+            y = max_y * 1.05
+            ax = plt.gca()
+            y_lower, y_upper = ax.get_ylim()
+            if y * 1.08 > y_upper:
+                ax.set_ylim(y_lower, y_upper * 1.08)
+            mid_x = (l_of_t[0] + l_of_t[-1]) / 2
+            ax.text(mid_x, y, t, ha='center', fontsize=fs)
+            xticks = ax.get_xticks()
+            ax.axhline(y*0.95, 
+                       (l_of_t[0]-0.425)/xticks[-1],
+                       (l_of_t[-1]+0.425)/xticks[-1],
+                       linestyle='-', color='black')
+
 
 # define an object that will be used by the legend
 class MulticolorPatch(object):
@@ -711,13 +770,15 @@ def pc_bootstrapped_difference(bound_averages):
     max_y = diffs[:].max()
     ax.vlines(10, -1, 1, linestyle='dashed', color='purple', alpha=1)
      
-    same_height = True
-    for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
-        if same_height:
-            max_y = diffs[:].max()
-        else:
-            max_y = diffs[i].max()
-        plot_significance_asterisk(i, max_y, p, fs=14)
+    max_y = diffs.max()
+    plot_significance_asterisks_bootstraps(num_bootstraps_below_zero(diffs), max_y)
+    # same_height = True
+    # for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
+    #     if same_height:
+    #         max_y = diffs[:].max()
+    #     else:
+    #         max_y = diffs[i].max()
+    #     plot_significance_asterisk(i, max_y, p, fs=14)
 
     # print(num_below_zero(diffs))
     # print(ax.get_xticks())
@@ -749,13 +810,15 @@ def pc_bootstrapped_difference_3TRs(bound_averages):
 
     ax.vlines(3, -1, 1, linestyle='dashed', color='purple', alpha=1)
 
-    same_height = True
-    for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
-        if same_height:
-            max_y = diffs[:].max()
-        else:
-            max_y = diffs[i].max()
-        plot_significance_asterisk(i, max_y, p, fs=14)
+    max_y = diffs.max()
+    plot_significance_asterisks_bootstraps(num_bootstraps_below_zero(diffs), max_y)
+    # same_height = True
+    # for i, p in zip(range(len(diffs)), num_bootstraps_below_zero(diffs)):
+    #     if same_height:
+    #         max_y = diffs[:].max()
+    #     else:
+    #         max_y = diffs[i].max()
+    #     plot_significance_asterisk(i, max_y, p, fs=14)
 
     # fig.suptitle("""Boundary triggered average for bootstrapped brains and boundaries
     # btw corr of TRxTR matrices, all TRs predicted-luminance
