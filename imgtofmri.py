@@ -225,7 +225,7 @@ def average_subjects(input_dir, output_dir):
 
 
 def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC']):
-    make_directories()
+    make_directories(input_dir=input_dir, output_dir=output_dir)
     generate_activations(input_dir)
     generate_brains(roi_list) # need to be providing the roi_list here
     transform_to_MNI()
@@ -242,15 +242,26 @@ def load_imgs(url):
     print(f"Downloaded and extracted: {filename}")
 
 
-def make_directories():
+def make_directories(input_dir="", output_dir=""):
     temp_dirs = ['temp/activations', 'temp/subj_space',
-                 'temp/temp', 'temp/mni', 'temp/mni_s']
+                 'temp/temp', 'temp/mni', 'temp/mni_s',]
     for directory in temp_dirs:
         try:
             os.makedirs(directory)
         except FileExistsError as e:
             for f in glob.glob(f"{directory}/*"):
                 os.remove(f)
+
+    perm_dirs = [input_dir, output_dir,
+                 'temp/corr/partly_cloudy', 'temp/corr/twinset']
+    for directory in perm_dirs:
+        if directory == "": 
+            continue
+        try:
+            os.makedirs(directory)
+        except FileExistsError as e:
+            continue
+
 
 
 # Twinset:
@@ -265,7 +276,7 @@ def twinset_generate_group_correlations(output_dir):
         pred_brain = nib.load(f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
 
         for i_test, image_test in enumerate(range(1,157)):
-            filename = f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
+            filename = f'ground_truth/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
             true_brain = nib.load(filename).get_fdata()
             pred_overlap = pred_brain[overlap]
             true_overlap = true_brain[overlap]
@@ -274,12 +285,12 @@ def twinset_generate_group_correlations(output_dir):
             corr[i_pred, i_test] = pearson_r
 
 
-    pkl_filename = f"../twinset/corr_avg_brains.pkl"
+    pkl_filename = f"temp/corr/twinset/corr_avg_brains.pkl"
     pickle.dump(corr, open(pkl_filename, 'wb'))
 
 def twinset_random_group_permutations(n_shuffle=1000, print_vals=False):
     corr = np.zeros((156, 156))
-    filename = f"../twinset/corr_avg_brains.pkl"
+    filename = f"temp/corr/twinset/corr_avg_brains.pkl"
     corr = np.load(filename, allow_pickle = True)
 
     df = corr
@@ -353,7 +364,7 @@ def twinset_generate_category_correlations(output_dir):
             # if i_pred % 20 == 0: print(f"completed {i_pred} images")
 
             for i_test, image_test in enumerate(cat_range):
-                filename = f'../twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
+                filename = f'ground_truth/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
                 true_brain = nib.load(filename).get_fdata()
                 pred_overlap = pred_brain[overlap]
                 true_overlap = true_brain[overlap]
@@ -364,12 +375,12 @@ def twinset_generate_category_correlations(output_dir):
         corr[cat_idx] = cat_corr
         # print(f"Completed category: {TWINSET_CATEGORIES[cat_idx]}")
 
-    pkl_filename = f"../twinset/corr_categories.pkl"
+    pkl_filename = f"temp/corr/twinset/corr_categories.pkl"
     with open(pkl_filename, 'wb') as file:
         pickle.dump(corr, file)
 
 def twinset_random_category_permutations(n_shuffle=1000, print_vals=False):
-    filename = f"../twinset/corr_categories.pkl"
+    filename = f"temp/corr/twinset/corr_categories.pkl"
     full_corr = np.load(filename, allow_pickle=True)
     num_cat = full_corr.shape[0]
     ranked_full = np.empty((num_cat,),dtype=object)
@@ -457,7 +468,7 @@ def twinset_generate_participant_correlations(output_dir):
                 pred_filename = f'{output_dir}/{"{:03d}".format(image_pred)}.nii.gz'
                 pred_brain = nib.load(pred_filename).get_fdata()
                 for i_test, image_test in enumerate(range(1,num_images+1)):
-                    filename = f'../twinset/subj{"{:02d}".format(subj+1)}/' \
+                    filename = f'ground_truth/twinset/subj{"{:02d}".format(subj+1)}/' \
                                f'r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
                     true_brain = nib.load(filename).get_fdata()
                     pred_overlap = pred_brain[overlap]
@@ -468,12 +479,12 @@ def twinset_generate_participant_correlations(output_dir):
 
             corr[subj] = subj_corr
 
-    pkl_filename = f"../twinset/per_subj_correlations.pkl"
+    pkl_filename = f"temp/corr/twinset/per_subj_correlations.pkl"
     with open(pkl_filename, 'wb') as file:
         pickle.dump(corr, file)
 
 def twinset_random_participant_permutations(n_shuffle=1000, print_vals=False):
-    filename = f"../twinset/per_subj_correlations.pkl"
+    filename = f"temp/corr/twinset/per_subj_correlations.pkl"
     full_corr = np.load(filename, allow_pickle=True)
     num_cat = full_corr.shape[0]
     ranked_full = np.empty((num_cat,),dtype=object)
@@ -830,14 +841,14 @@ def generate_bootstrapped_correlations(true,
                                        lum, 
                                        TR_band=None,
                                        num_bootstraps=100,
-                                       true_dir="../pc_true/preprocessed_data"):
+                                       true_dir="ground_truth/partly_cloudy"):
     if TR_band != None:
         band = get_TR_band(TR_band, nTR=true.shape[0])
 
     # LOAD Bootstraps instead of generating
     # set up corr structure for shape: (num_bootstraps, 2 (lum, boot_real; pred, boot_real) x TR)
     init_subj = 123 # For initializing brain
-    init_subj_TRs = f'{true_dir}/sub-pixar{init_subj}/r_bold.nii.gz'
+    init_subj_TRs = f'init_brain.nii.gz'
     init_subj_nib = nib.load(init_subj_TRs)
     overlap = get_subj_overlap()
 
@@ -850,14 +861,14 @@ def generate_bootstrapped_correlations(true,
     # make bootstrap TODO: tqdm
     for i, b in enumerate(tqdm(range(num_bootstraps), desc='Generating and loading bootstraps')):
     #------- save bootstrap brains if don't exist
-        if glob.glob(f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz') == []:
+        if glob.glob(f'temp/corr/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz') == []:
             subj_sample = np.random.choice(range(123,156), size=33, replace=True)
-            avg = return_average_subjects(subj_sample) # TODO this won't work rn not defined
+            avg = return_average_subjects(subj_sample)
             nib.save(nib.Nifti1Image(avg, affine=init_subj_nib.affine),
-                    f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz')
+                    f'temp/corr/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz')
 
     ##------- load bootstraps
-        avg = nib.load(f'{true_dir}/bootstraps/bootstrap_{b}.nii.gz').get_fdata()
+        avg = nib.load(f'temp/corr/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz').get_fdata()
         # if i % 10 == 0: print(f"loaded bootstrap_{b}")
         # get TRxTR
         a = avg[:,:,:,10:] # cut intro TRs
@@ -1123,3 +1134,22 @@ def num_bootstraps_below_zero(diffs):
                 num_below_zero[i] += 1
 
     return (num_below_zero+1) / (num_bootstraps+1)
+
+# returns zscore of sum of zscored (+ra, +dcto) individual real brains
+def return_average_subjects(subject_list):
+    # print("Subject_list: ", subject_list)
+    init_subj = subject_list[0] # For initializing brain
+    init_subj_TRs = f'init_brain.nii.gz'
+    init_subj_nib = nib.load(init_subj_TRs)
+    sum_brains = np.full((init_subj_nib.shape), np.nan)
+
+    nTR = 168
+    overlap = get_subj_overlap()
+    for subj in subject_list:
+        subj_TR = f'ground_truth/partly_cloudy/sub-pixar{subj}/subj{subj}_r_ro_m_s_z_ra_dcto.nii.gz'
+        subj_brain = nib.load(subj_TR).get_fdata()
+        # sum_brains = np.nansum([sum_brains, subj_brain], axis=0)
+        sum_brains[overlap] = np.nansum([sum_brains[overlap], subj_brain[overlap]], axis=0)
+
+    sum_brains[overlap] = stats.zscore(sum_brains[overlap], axis=-1)
+    return sum_brains
