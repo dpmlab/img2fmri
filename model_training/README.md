@@ -3,6 +3,7 @@
 - Uses Pretrained ResNet18 (up to final fully-connected projection layer) for extracting image features
 - Uses open source BOLD5000 fMRI data as target data.
 
+File Descriptions:
 - model_training.ipynb:
     - Jupyter notebook outlining model training code.
     - Generates a directory 'models' which contains regression models used by imgtofmri.
