@@ -27,14 +27,16 @@ import nibabel as nib
 from nipype.interfaces import afni
 from nipype.interfaces import fsl
 
+from utils import get_subj_overlap
+
 ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
 
 
 # Predicts an fMRI response for each image in input_dir, and saves it to output_dir. Predicts only
 # into ROIs specified in roi_list.
-def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC']):
-    make_directories(input_dir=input_dir, output_dir=output_dir)
-    generate_activations(input_dir)
+def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC'], center_crop=False):
+    make_directories(output_dir=output_dir)
+    generate_activations(input_dir, center_crop=center_crop)
     generate_brains(roi_list)
     transform_to_MNI()
     smooth_brains()
@@ -43,12 +45,15 @@ def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC']):
 
 # Pushes input images through our pretrained resnet18 model and saves the activations.
 # Can be easily modified to a different network or layer if desired.
-def generate_activations(input_dir, output_dir=""):
+def generate_activations(input_dir, output_dir="", center_crop=False):
     if output_dir == "": 
         output_dir = f"temp/activations/"
 
     # Default input image transformations for ImageNet
-    scaler = transforms.Resize((224, 224))
+    if center_crop:
+        scaler = transforms.CenterCrop((224, 224))
+    else:
+        scaler = transforms.Resize((224, 224))
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     to_tensor = transforms.ToTensor()
@@ -78,7 +83,7 @@ def generate_activations(input_dir, output_dir=""):
 # Pushes each image activation through our regression model and saves an fMRI response in each 
 # of our three training subjects' brain space.
 def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
-    if roi_list is None: return
+    if roi_list is None or len(roi_list) == 0: return
     num_subjects = 3
     ridge_p_grid = {'alpha': np.logspace(1, 5, 10)}
     # Load presaved array which contains the shape of each training subject's voxel ROI
@@ -212,20 +217,3 @@ def make_directories(output_dir=""):
             os.makedirs(output_dir)
         except FileExistsError:
             pass
-
-# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
-# Works for all 5 ROIs, and returns a given voxel index if voxel value (post smoothing) > threshold.
-def get_subj_overlap(rois=['LOC', 'PPA', 'RSC']):
-    threshold = 0.15
-    for roi_idx, roi in enumerate(rois):
-        for subj in range(0,3):
-            lh = nib.load(f'derivatives/s_bool_masks/s_sub{subj+1}_LH{roi}_MNI.nii.gz').get_fdata()
-            rh = nib.load(f'derivatives/s_bool_masks/s_sub{subj+1}_RH{roi}_MNI.nii.gz').get_fdata()
-            LH_mask = lh > np.max(lh) * threshold
-            RH_mask = rh > np.max(rh) * threshold
-
-            if (roi_idx == 0) and (subj == 0):
-                subject_overlap = LH_mask | RH_mask
-            else: 
-                subject_overlap = subject_overlap | LH_mask | RH_mask
-    return subject_overlap
