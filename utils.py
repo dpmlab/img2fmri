@@ -5,9 +5,8 @@ from sklearn.linear_model import Ridge, LinearRegression
 import pickle
 from scipy import stats
 import h5py
+import cv2
 
-import torch
-import torchvision.models as models
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 from PIL import Image
@@ -25,31 +24,101 @@ from natsort import natsorted
 
 from tqdm import tqdm, trange
 
-# smallsize=14; mediumsize=16; largesize=18
-# plt.rc('xtick', labelsize=smallsize); plt.rc('ytick', labelsize=smallsize); plt.rc('legend', fontsize=mediumsize)
-# plt.rc('figure', titlesize=largesize); plt.rc('axes', labelsize=mediumsize); plt.rc('axes', titlesize=mediumsize)
-# ###
+MNI_SHAPE = (91, 109, 91)
 
-from matplotlib.backends.backend_pdf import PdfPages
-import matplotlib.pyplot as plt
 
-# Pre-processing functions:
+# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
+# Works for all 5 ROIs, and returns a given voxel index if voxel value (post smoothing) > threshold.
+def get_subj_overlap(rois=['LOC', 'PPA', 'RSC']):
+    threshold = 0.15
+    for roi_idx, roi in enumerate(rois):
+        for subj in range(0,3):
+            lh = nib.load(f'derivatives/s_bool_masks/s_sub{subj+1}_LH{roi}_MNI.nii.gz').get_fdata()
+            rh = nib.load(f'derivatives/s_bool_masks/s_sub{subj+1}_RH{roi}_MNI.nii.gz').get_fdata()
+            LH_mask = lh > np.max(lh) * threshold
+            RH_mask = rh > np.max(rh) * threshold
+
+            if (roi_idx == 0) and (subj == 0):
+                subject_overlap = LH_mask | RH_mask
+            else: 
+                subject_overlap = subject_overlap | LH_mask | RH_mask
+    return subject_overlap
+
+
+# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
+# Works for all 5 ROIs, and returns a given voxel index if voxel value of bool mask > threshold.
+def get_subj_overlap_nonsmoothed(rois=['LOC', 'PPA', 'RSC']):
+    threshold = 0.15
+    for roi_idx, roi in enumerate(rois):
+        for subj in range(0,3):
+            lh = nib.load(f'derivatives/mni_bool_masks/sub{subj+1}_LH{roi}_MNI.nii.gz').get_fdata()
+            rh = nib.load(f'derivatives/mni_bool_masks/sub{subj+1}_RH{roi}_MNI.nii.gz').get_fdata()
+            LH_mask = lh > np.max(lh) * threshold
+            RH_mask = rh > np.max(rh) * threshold
+
+            if (roi_idx == 0) and (subj == 0):
+                subject_overlap = LH_mask | RH_mask
+            else: 
+                subject_overlap = subject_overlap | LH_mask | RH_mask
+    return subject_overlap
+
+
+# Extracts frames from an input movie at 2Hz and saves them to the output_dir.
+def extract_frames(input_file, output_dir):
+    vidcap = cv2.VideoCapture(input_file)
+    success, image = vidcap.read()
+    if not success:
+        print(f"Did not find video at {input_file}")
+    try:
+        os.makedirs(output_dir)
+    except FileExistsError:
+        pass
+    
+    frame_count = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
+    framerate = vidcap.get(cv2.CAP_PROP_FPS)
+    movie_length = frame_count / framerate
+    msec_per_frame = 500 # 2 frames a second
+    frames_to_skip = 30
+    msec_count = 0
+    frame_count = 1
+    
+    with tqdm(total=int(movie_length * 2) + 1, desc='Saving movie frames') as pbar:
+        while msec_count < movie_length * 1000:
+            vidcap.set(cv2.CAP_PROP_POS_MSEC, msec_count)
+            success,image = vidcap.read()
+            cv2.imwrite(f"{output_dir}/frame{frame_count}.jpg", image) # save frame as JPEG file
+            msec_count += msec_per_frame
+            frame_count += frames_to_skip
+            pbar.update(1)
+    vidcap.release()
+
+
+# Loads fMRI responses to individual frames from input_dir in sorted order and returns a 4D volume 
+def load_frames(input_dir):
+    sorted_files = natsorted(glob.glob(f'{input_dir}/*'))
+    movie_response_shape = np.concatenate((MNI_SHAPE, [len(sorted_files)]))
+    movie_response = np.full((movie_response_shape), np.nan)
+    
+    for i, filename in enumerate(tqdm(sorted_files, desc="Loading movie frames")):
+        movie_response[...,i] = nib.load(filename).get_fdata()
+    return movie_response
+
+
+##### Pre-processing functions:
 def remove_average_activity(a):
-    for img in range(a.shape[-1]): 
-        a[...,img] = a[...,img] - np.mean(a, axis=-1)
+    b = np.zeros(a.shape)
+    for img in trange(a.shape[-1], desc='Removing average activity'): 
+        b[...,img] = a[...,img] - np.mean(a, axis=-1)
+    return b
 
-    return a
 
-
+# Remove drift artifacts using discrete cosine transform
 def remove_DCT(a):
-    period_cut = 120
-    timepoints = 168
-    timestep = 2
+    period_cut = 120 # threshold for low-pass filter
+    timepoints = 168 # TRs
+    timestep = 2 
     frametimes = timestep * np.arange(timepoints)
     cdrift = _cosine_drift(period_cut, frametimes)
-
-    # residuals, regressors = cosine_filter(a, 2, 120, remove_mean=True)
-    # return residuals
 
     regressor = cdrift
     brain_shape = a.shape
@@ -58,27 +127,23 @@ def remove_DCT(a):
     model = LinearRegression()
     model.fit(regressor, brain.T)
     brain = brain - np.dot(model.coef_, regressor.T) - model.intercept_[:, np.newaxis]
-    brain = brain.reshape(brain_shape) #TODO was 'bran =' ???
-#     brain = brain.reshape((a.shape[0], a.shape[1],a.shape[2], brain.shape[-1]))
-    # print(f"new brain shape: {brain.shape}")
-
+    brain = brain.reshape(brain_shape)
     return brain
 
 
+# Remove nuisance artifacts from Partly Cloudy dataset
 def regress_out(true_dir):
     for subj in range(123,156):
-        # if (subj % 10 == 0): print(f"Subj{subj}")
         regressor = h5py.File(f'{true_dir}/sub-pixar{subj}/sub-pixar{subj}_task-pixar_run-001_ART_and_CompCor_nuisance_regressors.mat', 'r')
         regressor = regressor['R']
-        regressor = np.asarray(regressor).T # shape: x,168 --> 168,x
-        print(f"subj{subj} regressor[0:3]: {regressor[0:3]}")
+        regressor = np.asarray(regressor).T 
 
         subj_TRs = f'{true_dir}/sub-pixar{subj}/subj{subj}_r.nii.gz'
         brain_nib = nib.load(subj_TRs)
         brain = brain_nib.get_fdata() # shape: (x,y,z,TRs)
 
         n_voxels = np.prod(brain.shape[:-1])
-        brain = brain.reshape((n_voxels, brain.shape[-1])) # flatten brain: (n_vox, n_TRs) 
+        brain = brain.reshape((n_voxels, brain.shape[-1])) # flatten brain: (n_vox, n_TRs)
 
         model = LinearRegression()
         model.fit(regressor, brain.T) # takes shapes of: (n_samples, n_features; n_TRs, n_vox)
@@ -90,11 +155,9 @@ def regress_out(true_dir):
              f'{true_dir}/sub-pixar{subj}/subj{subj}_r_ro.nii.gz')
 
 
-# Convolve and downsample event timecourses to TR timecourses
-def regressor_to_TR(E, TR=2, nTR=168):
-    T = E.shape[3]
-    # print(f"num frames: {T}, num TRs: {nTR}")
-    # nEvents = E.shape[1]
+# Convolve and downsample movie timecourse to TR timecourse
+def convolve_and_downsample(E, TR=2, nTR=168):
+    T = E.shape[-1]
 
     # HRF (from AFNI)
     dt = np.arange(0, 15, step=0.5)
@@ -102,25 +165,21 @@ def regressor_to_TR(E, TR=2, nTR=168):
     q = 0.547
     hrf = np.power(dt / (p * q), p) * np.exp(p - dt / q)
 
-    # Convolve event matrix to get design matrix
-    design_seconds = np.zeros(( E.shape[0], E.shape[1], E.shape[2], E.shape[3] ))
-
+    # Convolve frame timecourse with HRF
+    initial_timecourse = np.zeros(E.shape)
     for x in trange(E.shape[0], desc='Convolving with HRF'):
-        for y in range(E.shape[1]):
-            for z in range(E.shape[2]):
-                design_seconds[x,y,z,:] = np.convolve(E[x, y, z, :], hrf)[:T]
+        initial_timecourse[x,:] = np.convolve(E[x,:], hrf)[:T]
 
-    # Downsample event matrix to TRs
+    # Downsample frame timecourse to TR timecourse
     timepoints = np.linspace(0, T, nTR)
-    design = np.zeros((E.shape[0], E.shape[1], E.shape[2], len(timepoints)))
+    downsampled = np.zeros((E.shape[0], len(timepoints)))
     for x in trange(E.shape[0], desc='Downsampling'):
-        for y in range(E.shape[1]):
-            for z in range(E.shape[2]):
-                design[x,y,z,:] = np.interp(timepoints, np.arange(0, T), design_seconds[x,y,z,:])
+        downsampled[x,:] = np.interp(timepoints, np.arange(0, T), initial_timecourse[x,:])
 
-    return design
+    return downsampled
 
 
+# Used to downsample human annotated event bounds from partly cloudy to TR space
 def pc_event_bounds(offset = 0):
     # 13 bounds (+2 endpoints) == 14 events
     bounds_seconds = [23, 52, 60+30, 60+53, 120+24, 120+46,
@@ -129,7 +188,6 @@ def pc_event_bounds(offset = 0):
     bounds_seconds = np.asarray(bounds_seconds)
     bounds_seconds += 6 # add for BOLD signal
 
-    # print(bounds_seconds)
     nSec = 5*60 + 45
     nTR = 168
     mov = np.zeros((nSec))
@@ -151,84 +209,21 @@ def pc_event_bounds(offset = 0):
     return bounds
 
 
-# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
-# Works for all 5 ROIs, and returns a given voxel index if voxel value of bool mask > threshold.
-def get_subj_overlap_nonsmoothed(rois=['LOC', 'PPA', 'RSC']):
-    threshold = 0.15
-    for roi_idx, roi in enumerate(rois):
-        for subj in range(0,3):
-            lh = nib.load(f'derivatives/mni_bool_masks/sub{subj+1}_LH{roi}_MNI.nii.gz').get_fdata()
-            rh = nib.load(f'derivatives/mni_bool_masks/sub{subj+1}_RH{roi}_MNI.nii.gz').get_fdata()
-            LH_mask = lh > np.max(lh) * threshold
-            RH_mask = rh > np.max(rh) * threshold
-
-            if (roi_idx == 0) and (subj == 0):
-                subject_overlap = LH_mask | RH_mask
-            else: 
-                subject_overlap = subject_overlap | LH_mask | RH_mask
-    return subject_overlap
-
-
-def dir_path(string):
-    if os.path.isdir(string):
-        return Path(string).resolve()
-    else:
-        raise NotADirectoryError(string)
-
-
-import cv2
-from tqdm import tqdm
-
-
-def extractImages(pathIn, pathOut):
-    vidcap = cv2.VideoCapture(pathIn)
-    success, image = vidcap.read()
-    if not success:
-        print(f"Did not find video at {pathIn}") 
-    
-    frame_count = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
-    framerate = vidcap.get(cv2.CAP_PROP_FPS)
-    movie_length = frame_count / framerate
-    msec_per_frame = 500 # 2 frames a second
-    frames_to_skip = 30
-    msec_count = 0
-    frame_count = 1
-    
-    with tqdm(total=int(movie_length * 2), desc='Saving movie frames') as pbar:
-        while msec_count < movie_length * 1000:
-            vidcap.set(cv2.CAP_PROP_POS_MSEC, msec_count)
-            success,image = vidcap.read()
-            cv2.imwrite(f"{pathOut}/frame{frame_count}.jpg", image)     # save frame as JPEG file
-            msec_count += msec_per_frame
-            frame_count += frames_to_skip
-            pbar.update(1)
-
-    vidcap.release()
-
-# Plots correlation matrices for Partly Cloudy analyses
-def plot_correlation_matrices(real, pred, lum):
-    # Correlation matrices
-    fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
-    axes[0].imshow(real)
-    axes[1].imshow(pred)
-    axes[2].imshow(lum)
-    axes[0].set_xlabel('Real brains', fontsize=12)
-    axes[1].set_xlabel('Predicted brains', fontsize=12)
-    axes[2].set_xlabel('Image luminace', fontsize=12)
-    fig.suptitle('Correlation matrices for Partly Cloudy', fontsize=16)
-
 # Calculates the luminance of an image or set of images, and returns a 2-dim object
 # with luminance_value x number of frames. Expects an input_dir of image frames
-def get_luminance(conv=True, rgb=False, input_dir="partly_cloudy_frames", TRs=168):
-    scaler = transforms.Resize((224, 224))
+def get_luminance(conv=True, input_dir="partly_cloudy_frames", TRs=168, center_crop=False):
+    if center_crop:
+        scaler = transforms.CenterCrop((224, 224))
+    else:
+        scaler = transforms.Resize((224, 224))
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
     to_tensor = transforms.ToTensor()
 
     mov = []
     sorted_files = natsorted(glob.glob(f'{input_dir}/*'))
-    for i, file in enumerate(tqdm(sorted_files, desc="Loading images")):
-        img = Image.open(file)
+    for i, filename in enumerate(tqdm(sorted_files, desc="Loading images")):
+        img = Image.open(filename)
         t_img = Variable(normalize(to_tensor(scaler(img))))
         image = t_img.data.numpy()
         image = np.transpose(image, (1,2,0))
@@ -236,7 +231,13 @@ def get_luminance(conv=True, rgb=False, input_dir="partly_cloudy_frames", TRs=16
         mov.append(image)
 
     mov = np.asarray(mov)
-    mov_convd = regressor_to_TR(mov.T, 2, TRs)
+    downsampled_shape = np.concatenate((mov.T.shape[0:3], [TRs]))
+    mov_convd = np.zeros(downsampled_shape)
+
+    mov_flattened = mov.T.reshape((-1, mov.T.shape[-1]))
+    conv_flattened = convolve_and_downsample(mov_flattened, 2, TRs)
+    mov_convd = conv_flattened.reshape((downsampled_shape))
+
     mov_l = mov_convd.T
 
     y = mov_l[:,:,:,0]*0.2126 + mov_l[:,:,:,1]*0.7152 + mov_l[:,:,:,2]*0.0722
@@ -250,32 +251,6 @@ def get_luminance(conv=True, rgb=False, input_dir="partly_cloudy_frames", TRs=16
 
 ############################################
 # The functions in this section have been copied from nipype's confounds.py
-def cosine_filter(
-    data, timestep, period_cut, remove_mean=True, axis=-1, failure_mode="error"
-):
-    datashape = data.shape
-    timepoints = datashape[axis]
-    if datashape[0] == 0 and failure_mode != "error":
-        return data, np.array([])
-
-    data = data.reshape((-1, timepoints))
-
-    frametimes = timestep * np.arange(timepoints)
-    X = _full_rank(_cosine_drift(period_cut, frametimes))[0]
-    print(f"X.shape: {X.shape}")
-    non_constant_regressors = X[:, :-1] if X.shape[1] > 1 else np.array([])
-
-    betas = np.linalg.lstsq(X, data.T)[0]
-
-    if not remove_mean:
-        X = X[:, :-1]
-        betas = betas[:-1]
-
-    residuals = data - X.dot(betas).T
-
-    return residuals.reshape(datashape), non_constant_regressors
-
-
 def _cosine_drift(period_cut, frametimes):
     """Create a cosine drift matrix with periods greater or equals to period_cut
     Parameters
@@ -308,38 +283,4 @@ def _cosine_drift(period_cut, frametimes):
     cdrift[:, order - 1] = 1.0  # or 1./sqrt(len_tim) to normalize
     return cdrift
 
-
-def _full_rank(X, cmax=1e15):
-    """
-    This function possibly adds a scalar matrix to X
-    to guarantee that the condition number is smaller than a given threshold.
-    Parameters
-    ----------
-    X: array of shape(nrows, ncols)
-    cmax=1.e-15, float tolerance for condition number
-    Returns
-    -------
-    X: array of shape(nrows, ncols) after regularization
-    cmax=1.e-15, float tolerance for condition number
-    """
-    U, s, V = fallback_svd(X, full_matrices=False)
-    smax, smin = s.max(), s.min()
-    c = smax / smin
-    if c < cmax:
-        return X, c
-    IFLOGGER.warning("Matrix is singular at working precision, regularizing...")
-    lda = (smax - cmax * smin) / (cmax - 1)
-    s = s + lda
-    X = np.dot(U, np.dot(np.diag(s), V))
-    return X, cmax
-
-def fallback_svd(a, full_matrices=True, compute_uv=True):
-    try:
-        return np.linalg.svd(a, full_matrices=full_matrices, compute_uv=compute_uv)
-    except np.linalg.LinAlgError:
-        pass
-
-    from scipy.linalg import svd
-
-    return svd(a, full_matrices=full_matrices, compute_uv=compute_uv, lapack_driver="gesvd")
 ############################################

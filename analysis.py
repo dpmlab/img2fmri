@@ -114,7 +114,7 @@ def twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals):
     ax.set_title("Difference between diagonal and off-diagonal \n " \
                  "for correlation matrix of predicted and real brains")
     max_y = max(shuffled_diffs.max(), real_diff)
-    plot_significance_asterisk(ax.get_xticks()[0], max_y,  p, fs=16)
+    plot_significance_asterisk(ax.get_xticks()[0], p, max_y, fs=16)
     ax.legend(loc="lower right", fontsize=12)
 
     if print_vals:
@@ -207,7 +207,7 @@ def twinset_category_correlations(image_dir):
 
 # Plots twinset category-level analysis
 def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
-    num_cat = 5
+    num_cat = p_stats.shape[0]
     categories = ['animals', 'objects', 'scenes', 'people', 'faces']
     colors = ['blue', 'orange', 'green', 'red', 'purple']
     fig, ax = plt.subplots(figsize=(7,7))
@@ -226,7 +226,7 @@ def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
     ax.set_xticklabels(categories, fontsize=12)
     for i, xtick, p in zip(range(num_cat), ax.get_xticks(), p_stats[:,0]):
         max_y = max(real_diffs[i].max(), shuffled_diffs[i].max())
-        plot_significance_asterisk(xtick, max_y, p, fs=16)
+        plot_significance_asterisk(xtick, p, max_y, fs=16)
 
     # add the multicolor category patch to legend
     h, l = ax.get_legend_handles_labels()
@@ -326,6 +326,7 @@ def twinset_participant_correlations(image_dir):
 
 # Plots twinset participant-level analysis
 def twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
+    num_cat = p_stats.shape[0]
     fig, ax = plt.subplots(figsize=(7,7))
     ax.scatter(range(1,16), real_diffs, marker='o', color='k', edgecolors='k', label='Real matrix')
     plotparts = ax.violinplot(shuffled_diffs.T, showextrema = False)
@@ -349,12 +350,12 @@ def twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals
             max_y = max(real_diffs[:].max(), shuffled_diffs[:].max())
         else:
             max_y = max(real_diffs[i].max(), shuffled_diffs[i].max())
-        plot_significance_asterisk(xtick, max_y, p, fs=12)
+        plot_significance_asterisk(xtick, p, max_y, fs=12)
 
     if print_vals:
         for c in range(num_cat):
             print(f"Real difference:      {real_diffs[c]:.10}")
-            print(f"Mean null difference: {np.mean(participant_diffs[c]):.10f}")
+            print(f"Mean null difference: {np.mean(shuffled_diffs[c]):.10f}")
             print(f"p value:              {p_stats[c,0]:.10f}\n")
 
 
@@ -642,7 +643,7 @@ def average_subject_permutation(subject_list):
     return sum_brains
 
 
-######## Plotting functions:
+##### Plotting functions:
 
 # Plots correlation matrices for Partly Cloudy analyses
 def plot_correlation_matrices(pred, real, lum):
@@ -657,12 +658,11 @@ def plot_correlation_matrices(pred, real, lum):
     axes[2].set_xlabel('Image luminace', fontsize=12)
 
     for a, ax in enumerate(axes.ravel()):
-        # ax.text(-0.13, 1.05, string.ascii_lowercase[a], transform=ax.transAxes, 
         ax.text(-0.13, -.15, string.ascii_lowercase[a], transform=ax.transAxes, 
                 size=16, weight='bold')
     fig.suptitle('Correlation matrices for Partly Cloudy', fontsize=16, y=1)
 
-
+# Plots correlatoin matrices for preprocessing steps
 def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(16,4))
     axes[0].imshow(np.corrcoef(pred_voxels.T), vmin=-1, vmax=1)
@@ -677,37 +677,28 @@ def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
     axes[3].set_xlabel('DCT removed', fontsize=12)
 
     for a, ax in enumerate(axes.ravel()):
-        # ax.text(-0.13, 1.05, string.ascii_lowercase[a], transform=ax.transAxes, 
         ax.text(-0.13, -.15, string.ascii_lowercase[a], transform=ax.transAxes, 
                 size=16, weight='bold')
     fig.suptitle('Correlation matrices of Partly Cloudy prediction preprocessing', 
                  fontsize=16, y=.95)
 
-# TODO modified from
-# https://stackoverflow.com/questions/11517986/
-# indicating-the-statistically-significant-difference-in-bar-graph
-def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
-    if type(data) is str:
-        text = data
-    else:
-        # † (\u2020) is <0.075
-        # * is p < 0.05
-        # ** is p < 0.01
-        # *** is p < 0.001
-        # etc.
-        text = "\u2020" if data < 0.075 and data > 0.05 else ""
 
-        p = .05 
-        if data < p:
-            text += "*"
+# Plots significance markers
+def plot_significance_asterisk(x, data, max_y, maxasterix=None, fs=12):
+    # † is <0.075,      * is p < 0.05
+    # ** is p < 0.01,   *** is p < 0.001, etc.
+    text = "\u2020" if data < 0.075 and data > 0.05 else ""
 
-        p = 0.01
-        while data < p:
-            text += '*'
-            p /= 10.
+    p = .05 
+    if data < p:
+        text += "*"
+    p = 0.01
+    while data < p:
+        text += '*'
+        p /= 10.
 
-            if maxasterix and len(text) == maxasterix:
-                break
+        if maxasterix and len(text) == maxasterix:
+            break
     
     if text != "":
         y = max_y * 1.05
@@ -717,43 +708,37 @@ def plot_significance_asterisk(x, max_y, data, maxasterix=None, fs=12):
             ax.set_ylim(y_lower, y_upper * 1.08)
         ax.text(x, y, text, ha='center', fontsize=fs)
         xticks = ax.get_xticks()
-        # print((x-0.49)/xticks[-1], (x+0.5)/xticks[-1])
-        # ax.axhline(y*0.95, (x-0.425)/xticks[-1], (x+0.425)/xticks[-1], linestyle='-', color='black')
 
-# TODO cleanup...
+
+# Plots significance markers for boundary triggered average analysis
 def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
-    # † (\u2020) is <0.075
-    # * is p < 0.05
-    # ** is p < 0.01
-    # *** is p < 0.001
-    # etc.
+    # † is <0.075,      * is p < 0.05
+    # ** is p < 0.01,   *** is p < 0.001, etc.
+    # Get signifiance marker (if any) for each TR
     asterisks = np.empty((len(data)),dtype=object)
     for i, d in enumerate(data):
         text = "\u2020" if d < 0.075 and d > 0.05 else ""
-
         p = .05 
         if d < p:
             text += "*"
-
         p = 0.01
         while d < p:
             text += '*'
             p /= 10.
-
             if maxasterix and len(text) == maxasterix:
                 break
         asterisks[i] = text
 
-    same_ticks = {}
+    # Check if neighboring TRs require same significance marker
+    markers = {}
     i = 0
     while i < len(asterisks):
         a = asterisks[i]
         if a == "":
             i += 1
             continue
-        if a not in same_ticks:
-            same_ticks[a] = list()
-
+        if a not in markers:
+            markers[a] = list()
         j = i + 1
         same_indices = [ i ]
         while j < len(asterisks):
@@ -764,12 +749,12 @@ def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
             else:
                 i -= 1
                 break
-        same_ticks[a].append(same_indices)
+        markers[a].append(same_indices)
         i += 1
 
-
-    for t in same_ticks:
-        for l_of_t in same_ticks[t]:
+    # Add significance markers to plot
+    for t in markers:
+        for l_of_t in markers[t]:
             y = max_y * 1.05
             ax = plt.gca()
             y_lower, y_upper = ax.get_ylim()
@@ -783,12 +768,13 @@ def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
                        (l_of_t[-1]+0.425)/xticks[-1],
                        linestyle='-', color='black')
 
-
-# define an object that will be used by the legend
+# Multicolor patch code assisted from https://stackoverflow.com/a/67870930/12685473
+# Define an object that will be used by the legend
 class MulticolorPatch(object):
     def __init__(self, colors, alpha=1):
         self.colors = colors
         self.alpha = alpha
+
 
 # define a handler for the MulticolorPatch object
 class MulticolorPatchHandler(object):
