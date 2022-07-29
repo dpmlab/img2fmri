@@ -430,8 +430,11 @@ def pc_pred_lum_timecourse(corr):
     l.append('corr(predicted, real)')
     h.reverse(); l.reverse() # corrects ordering of legend and handles
     axes.legend(h,l,fontsize='large',loc='lower right')
-    plt.title("Event structure similarity from correlation matrices " \
-              "with bootstrapped sampling of real fMRI responses", fontsize=14)
+    plt.title("Similarity between timepoint-timepoint correlation matrices \n"
+              "for predicted response with real response, and luminance model with real response",
+              fontsize=14)
+    # plt.title("Event structure similarity from correlation matrices " \
+    #           "with bootstrapped sampling of real fMRI responses", fontsize=14)
     # plt.title("Row by row correlation of correlation matrices " \
     #           "with bootstrapped sampling of real fMRI responses", fontsize=14)
     axes.set_xlabel("Movie timecourse (TRs, TR=2s)", fontsize=12)
@@ -460,8 +463,11 @@ def pc_difference_timecourse(corr):
     h.reverse(); l.reverse() # corrects ordering of legend and handles
     axes.legend(h,l,fontsize='large',loc='lower right')
     axes.set_xlabel("Movie timecourse (TRs, TR=2s)", fontsize=12)
-    plt.title("Difference between event structure similarity from correlation matrices" \
-            "with bootstrapped sampling of real fMRI responses", fontsize=14)
+    plt.title("Difference between timepoint-timepoint correlation matrix similarities \n"
+              "for predicted response with real response, and luminance model with real response",
+              fontsize=14)
+    # plt.title("Difference between event structure similarity from correlation matrices" \
+    #         "with bootstrapped sampling of real fMRI responses", fontsize=14)
     # plt.title("Difference between row by row correlations of correlation matrices " \
     #         "with bootstrapped sampling of real fMRI responses", fontsize=14)
     plt.show()
