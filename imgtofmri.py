@@ -1,27 +1,23 @@
+"""
+imgtofmri python package for predicting group-level fMRI responses to individual images.
+Tutorial and analysis found at: https://github.com/dpmlab/imgtofmri
+Author: Maxwell Bennett mbb2176@columbia.edu
+"""
 import os
 import glob
-import pickle
+import argparse
 import joblib
 from pathlib import Path
-
-import zipfile
-import wget
-from natsort import natsorted
-from tqdm import tqdm, trange
 from PIL import Image
+from tqdm import tqdm
 
 import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
-from matplotlib.collections import PatchCollection
-import pandas as pd
-from sklearn.linear_model import Ridge
 from scipy import stats
 
 import torch
+from torch.autograd import Variable
 from torchvision import models
 from torchvision import transforms
-from torch.autograd import Variable
 
 import nibabel as nib
 from nipype.interfaces import afni
@@ -29,29 +25,50 @@ from nipype.interfaces import fsl
 
 from utils import get_subj_overlap
 
+# Predictions can be made for these ROIs, however default is ['LOC', 'PPA', 'RSC'] given signif.
 ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
+TQDM_FORMAT = '{l_bar}{bar:10}{r_bar}{bar:-10b}' # default progress bar format
 
 
-# Predicts an fMRI response for each image in input_dir, and saves it to output_dir. Predicts only
-# into ROIs specified in roi_list.
-def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC'], center_crop=False):
+def main():
+    """
+    Command line interface version to predict group-level fMRI responses to individual image frames
+    usage: python imgtofmri.py [-h] --input input_dir [--output output_dir] [--rois each roi here]
+                               [--sigma sigma_val] [--center_crop center_crop]
+    """
+    args = get_args()
+    make_directories(output_dir=args.output)
+    predict(args.input[0], args.output, args.rois, args.sigma, args.center_crop)
+
+
+def predict(input_dir, output_dir, roi_list=['LOC', 'PPA', 'RSC'], sigma=1, center_crop=False):
+    """
+    Predicts an fMRI response for each image in input_dir, and saves it to output_dir.
+    Predicts only to ROIs specified in roi_list. sigma specifies smoothing constant.
+    """
     make_directories(output_dir=output_dir)
     generate_activations(input_dir, center_crop=center_crop)
     generate_brains(roi_list)
     transform_to_MNI()
-    smooth_brains()
+    smooth_brains(sigma)
     average_subjects(input_dir, output_dir)
 
 
-# Pushes input images through our pretrained resnet18 model and saves the activations.
-# Can be easily modified to a different network or layer if desired.
 def generate_activations(input_dir, output_dir="", center_crop=False):
-    if output_dir == "": 
-        output_dir = f"temp/activations/"
+    """
+    Pushes input images through our pretrained resnet18 model and saves the activations.
+    Can be easily modified to a different network or layer if desired by changing model.
+    center_crop -- specifies whether each image is resized or 'squished' to a square, vs. cropped.
+    """
+    if output_dir == "":
+        output_dir = "temp/activations/"
 
     # Default input image transformations for ImageNet
     if center_crop:
-        scaler = transforms.CenterCrop((224, 224))
+        scaler = transforms.Compose([
+            transforms.Resize(224),
+            transforms.CenterCrop((224, 224))
+        ])
     else:
         scaler = transforms.Resize((224, 224))
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
@@ -59,10 +76,11 @@ def generate_activations(input_dir, output_dir="", center_crop=False):
     to_tensor = transforms.ToTensor()
 
     # Load our pretrained model
-    model = models.resnet18(pretrained=True)
+    model = models.resnet18(weights='DEFAULT')
     model.eval()
 
-    for filename in tqdm(glob.glob(f"{input_dir}/*"), desc='Pushing images through CNN'):
+    desc = 'Pushing images through CNN'
+    for filename in tqdm(glob.glob(f"{input_dir}/*"), bar_format=TQDM_FORMAT, desc=desc):
         if Path(filename).suffix not in [".jpg", '.JPG', '.jpeg', '.JPEG', ".png", '.PNG']:
             continue
 
@@ -80,18 +98,20 @@ def generate_activations(input_dir, output_dir="", center_crop=False):
         img.close()
 
 
-# Pushes each image activation through our regression model and saves an fMRI response in each 
-# of our three training subjects' brain space.
 def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
+    """
+    Pushes each image activation through our regression model and saves an fMRI response in each
+    of our three training subjects' brain space.
+    """
     if roi_list is None or len(roi_list) == 0: return
     num_subjects = 3
-    ridge_p_grid = {'alpha': np.logspace(1, 5, 10)}
     # Load presaved array which contains the shape of each training subject's voxel ROI
     shape_array = np.load('derivatives/shape_array.npy', allow_pickle=True)
 
     # For each subject, for each input file, predict all ROIs for that subject and save prediction
     num_predictions = num_subjects * len(glob.glob('temp/activations/*'))
-    with tqdm(total=num_predictions, desc='Predicting images into each subject\'s brain') as pbar:
+    desc = 'Predicting images into each subject\'s brain'
+    with tqdm(total=num_predictions, bar_format=TQDM_FORMAT, desc=desc) as pbar:
         for subj in range(num_subjects):
             for filename in glob.glob('temp/activations/*'):
                 pbar.update(1)
@@ -117,12 +137,12 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
                         subj_brain = np.empty(T1_mask_shape)
                         subj_brain[:, :, :] = np.NaN
 
-                    # LH Nanmean for this subject's ROI
+                    # Left hemisphere nanmean for this subject's ROI
                     temp_brain = np.array([subj_brain[LH_T1_mask],
                                 pred_brain[:int(shape_array[subj][ALL_ROIS.index(roi)][0])]])
                     temp_brain = np.nanmean(temp_brain, axis=0)
                     subj_brain[LH_T1_mask] = temp_brain
-                    # RH Nanmean for this subject's ROI
+                    # Right hemisphere nanmean for this subject's ROI
                     temp_brain = np.array([subj_brain[RH_T1_mask],
                                 pred_brain[int(shape_array[subj][ALL_ROIS.index(roi)][0]):]])
                     temp_brain = np.nanmean(temp_brain, axis=0)
@@ -132,16 +152,16 @@ def generate_brains(roi_list=["LOC", "RSC", "PPA"]):
                         f'temp/subj_space/sub{subj+1}_{Path(filename).stem}.nii.gz')
 
 
-# Transforms each subject's brain volume into MNI space for all input images
 def transform_to_MNI():
+    """ Transforms each subject's brain volume into MNI space for all input images """
     total_num_images = 3 * len(glob.glob('temp/activations/*'))
-    with tqdm(total=total_num_images, desc='Transforming each brain to MNI') as pbar:
+    desc = 'Transforming each brain to MNI'
+    with tqdm(total=total_num_images, bar_format=TQDM_FORMAT, desc=desc) as pbar:
         for subj in range(1,4):
             filename = f'temp/subj_space/sub{subj}*'
             for file in glob.glob(filename):
                 pbar.update(1)
                 stem = Path(file).stem
-
                 resample = afni.Resample()
                 resample.inputs.in_file = file
                 resample.inputs.master = f"derivatives/T1/sub-CSI{subj}_ses-16_anat_sub-CSI{subj}" \
@@ -160,12 +180,11 @@ def transform_to_MNI():
                 os.remove(f'temp/temp/{stem}')
 
 
-# Smooths the voxels in MNI space with sigma=1, or FWHM≈2.355
 def smooth_brains(sig=1):
+    """ Smooths the voxels in MNI space with sigma=1, or FWHM≈2.355 """
     filename = f"temp/mni/*"
-    for file in tqdm(glob.glob(filename), desc='Smoothing brains'):
+    for file in tqdm(glob.glob(filename), bar_format=TQDM_FORMAT, desc='Smoothing brains'):
         stem = Path(file).stem
-
         out = f"temp/mni_s/{stem}.gz"
         smooth = fsl.IsotropicSmooth()
         smooth.inputs.in_file = file
@@ -174,12 +193,15 @@ def smooth_brains(sig=1):
         smooth.run()
 
 
-# Averages each of our subject's brain volumes into one volume. Does this by z-scoring each volume,
-# summing those volumes, and then z-scoring the sum. Saves each averaged volume in the ouput folder. 
 def average_subjects(input_dir, output_dir):
+    """
+    Averages each BOLD5000 subject's brain volumes into one volume by z-scoring each volume,
+    summing those volumes, and then z-scoring the sum. Saves averaged volumes in the output folder.
+    """
     overlap = get_subj_overlap()
 
-    for filename in tqdm(glob.glob(f'{input_dir}/*'), desc='Averaging MNI brains'):
+    desc = 'Averaging MNI brains'
+    for filename in tqdm(glob.glob(f'{input_dir}/*'), bar_format=TQDM_FORMAT, desc=desc):
         if Path(filename).suffix not in [".jpg", '.JPG', '.jpeg', '.JPEG', ".png", '.PNG']:
             continue
 
@@ -200,8 +222,9 @@ def average_subjects(input_dir, output_dir):
         nib.save(nib.Nifti1Image(im_brain, affine=subj_mask_nib.affine),
                                  f'{output_dir}/{stem}.nii.gz')
 
-# Makes directories for storing activations, intermediate brain volumes, and output brain volumes.
+
 def make_directories(output_dir=""):
+    """ Makes directories for activations, intermediate brain volumes, and output brain volumes. """
     temp_dirs = ['temp/activations', 'temp/subj_space',
                  'temp/temp', 'temp/mni', 'temp/mni_s',]
     for directory in temp_dirs:
@@ -210,10 +233,39 @@ def make_directories(output_dir=""):
         except FileExistsError:
             for f in glob.glob(f"{directory}/*"):
                 os.remove(f)
-    
+
     # Ensure output directory exists
     if output_dir != "":
         try:
             os.makedirs(output_dir)
         except FileExistsError:
             pass
+
+
+def get_args():
+    """ Defines arguments for command line interface version of prediction. """
+    parser = argparse.ArgumentParser(description='Convert images into MNI brains.')
+    parser.add_argument('--input', metavar='input_dir', type=dir_path, required=True, nargs=1,
+                        help='input directory which contains all images to be processed.')
+    parser.add_argument('--output', metavar='output_dir', type=str, default='fmri_output',
+                        help='output directory where fMRI volumes will be saved.')
+    parser.add_argument('--rois', metavar='rois', type=str, nargs='+',
+                        default=['LOC', 'PPA', 'RSC'],
+                        help='fMRI ROIs to predict, default: LOC, PPA, RSC')
+    parser.add_argument('--sigma', metavar='sigma', type=float, default=1.0,
+                        help='sigma for smoothing MNI brains, default=1.0')
+    parser.add_argument('--center_crop', metavar='center_crop', type=int, default=0,
+                        help='whether to center crop input images instead of resizing full image '\
+                             ' to square. Argument passed as `"--center_crop=1`", default=0')
+    return parser.parse_args()
+
+
+def dir_path(string):
+    """ Defining a type for rejecting non-directory inputs to command line use"""
+    if os.path.isdir(string):
+        return Path(string).resolve()
+    raise NotADirectoryError(string)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,49 +1,47 @@
-import os
+"""
+Analysis and validation functions for imgtofmri python package tutorial.
+Tutorial and analysis found at: https://github.com/dpmlab/imgtofmri
+Author: Maxwell Bennett mbb2176@columbia.edu
+"""
 import sys
 import glob
-import pickle
-import joblib
 import string
-from pathlib import Path
+import pickle
 
-import zipfile
-import wget
 from natsort import natsorted
-from tqdm import tqdm, trange
 from PIL import Image
+from tqdm import tqdm
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.collections import PatchCollection
 import pandas as pd
-from sklearn.linear_model import Ridge
 from scipy import stats
 
-import torch
-from torchvision import models
 from torchvision import transforms
 from torch.autograd import Variable
 
 import nibabel as nib
-from nipype.interfaces import afni
-from nipype.interfaces import fsl
 
-from utils import get_subj_overlap
+from utils import get_subj_overlap, conv_hrf_and_downsample
 
 ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
 TWINSET_CATEGORIES = ['animals', 'objects', 'scenes', 'people', 'faces']
 PC_EVENT_BOUNDS = [0, 12, 26, 44, 56, 71, 81, 92, 104, 119, 123, 136, 143, 151]
+TQDM_FORMAT = '{l_bar}{bar:10}{r_bar}{bar:-10b}'
+
 
 ##### Functions for Twinset Analyses:
 ### Group-level analysis:
-# Generates shuffled permutations for group-level analysis for Twinset.
-def twinset_group_permutations(n_shuffle=10000,
-                               print_vals=False,
-                               force_resample=False,
-                               image_dir=""):
+def twinset_group_permutations(fmri_dir, n_shuffle=10000, print_vals=False, force_resample=False):
+    """
+    Generates shuffled permutations for group-level analysis for Twinset.
+    print_vals -- will print significance values
+    force_resample -- re-generates correlations before calculating null distribution
+    """
     if force_resample:
-        twinset_group_correlations(image_dir)
+        twinset_group_correlations(fmri_dir)
 
     corr = np.zeros((156, 156))
     filename = f"data/twinset/correlations/corr_avg_brains.pkl"
@@ -61,7 +59,8 @@ def twinset_group_permutations(n_shuffle=10000,
     resampled = np.zeros((num_resample, 2))
     shuffled_diffs = np.zeros(num_resample)
     count_over_real = 0
-    for i in tqdm(range(num_resample), desc='Performing permutation analysis'):
+    desc='Performing permutation analysis'
+    for i in tqdm(range(num_resample), bar_format=TQDM_FORMAT, desc=desc):
         df = pd.DataFrame(corr)
         df = df.sample(frac=1).reset_index(drop=True)
         df = pd.DataFrame.to_numpy(df)
@@ -76,15 +75,17 @@ def twinset_group_permutations(n_shuffle=10000,
     twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals)
 
 
-# Generates correlations between all predicted and group-averaged brains.
-# Called from twinset_group_permutations() if correlations don't exist or if resampling.
-def twinset_group_correlations(image_dir):
+def twinset_group_correlations(fmri_dir):
+    """
+    Generates correlations between all predicted and group-averaged brains.
+    Called from twinset_group_permutations() if correlations don't exist or if resampling.
+    """
     corr = np.zeros((156, 156))
     overlap = get_subj_overlap()
 
-    tqdm_desc = 'Generating correlations with group-averaged brains'
-    for i_pred, image_pred in enumerate(tqdm(range(1,157), desc=tqdm_desc)):
-        pred_brain = nib.load(f'{image_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
+    desc = 'Generating correlations with group-averaged brains'
+    for i_pred, image_pred in enumerate(tqdm(range(1,157), bar_format=TQDM_FORMAT, desc=desc)):
+        pred_brain = nib.load(f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
         for i_test, image_test in enumerate(range(1,157)):
             filename = f'data/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
             true_brain = nib.load(filename).get_fdata()
@@ -98,8 +99,8 @@ def twinset_group_correlations(image_dir):
     pickle.dump(corr, open(pkl_filename, 'wb'))
 
 
-# Plots twinset group level analysis
 def twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals):
+    """ Plots twinset group level analysis """
     fig, ax = plt.subplots(figsize=(7,7))
     ax.scatter(1, real_diff, marker='o', color='k', edgecolors='k', label='Real difference')
     plotparts = ax.violinplot(shuffled_diffs, showextrema=False,)
@@ -124,13 +125,17 @@ def twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals):
 
 
 ### Category level analysis:
-# Generates shuffled permutations for category-level analysis for Twinset.
-def twinset_category_permutations(n_shuffle=1000,
-                                  print_vals=False,
-                                  force_resample=False,
-                                  image_dir=""):
+def twinset_category_permutations(fmri_dir, 
+                                  n_shuffle=1000, 
+                                  print_vals=False, 
+                                  force_resample=False):
+    """ 
+    Generates shuffled permutations for category-level analysis for Twinset. 
+    print_vals -- will print significance values
+    force_resample -- re-generates correlations before calculating null distribution
+    """
     if force_resample:
-        twinset_category_correlations(image_dir)
+        twinset_category_correlations(fmri_dir)
 
     filename = f"data/twinset/correlations/corr_categories.pkl"
     full_corr = np.load(filename, allow_pickle=True)
@@ -157,8 +162,8 @@ def twinset_category_permutations(n_shuffle=1000,
         resampled = np.zeros((num_resample, 2))
         category_diffs = np.zeros(num_resample)
         count_over_real = 0
-        tqdm_description = f'Generating permutations for \'{TWINSET_CATEGORIES[c]}\''
-        for i in tqdm(range(num_resample), desc=tqdm_description):
+        desc = f'Generating permutations for \'{TWINSET_CATEGORIES[c]}\''
+        for i in tqdm(range(num_resample), bar_format=TQDM_FORMAT, desc=desc):
             df = pd.DataFrame(corr) # reset dataframe
             df = df.sample(frac=1).reset_index(drop=True) # take random sample
             df = pd.DataFrame.to_numpy(df)
@@ -175,9 +180,11 @@ def twinset_category_permutations(n_shuffle=1000,
     twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
 
-# Generates correlations between all predicted and group-averaged brains for each image category.
-# Called from twinset_category_permutations() if correlations don't exist or if resampling.
-def twinset_category_correlations(image_dir):
+def twinset_category_correlations(fmri_dir):
+    """
+    Generates correlations between all predicted and group-averaged brains for each image category.
+    Called from twinset_category_permutations() if correlations don't exist or if resampling.
+    """
     corr = np.zeros((5,), dtype=object)
     overlap = get_subj_overlap()
 
@@ -185,9 +192,9 @@ def twinset_category_correlations(image_dir):
                                          range(101, 125), range(125,157)]):
         cat_length = cat_range[-1] - cat_range[0] + 1
         cat_corr = np.zeros((cat_length, cat_length))
-        tqdm_description = f'Generating correlations for \'{TWINSET_CATEGORIES[cat_idx]}\''
-        for i_pred, image_pred in enumerate(tqdm(cat_range, desc=tqdm_description)):
-            pred_brain = nib.load(f'{image_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
+        desc = f'Generating correlations for \'{TWINSET_CATEGORIES[cat_idx]}\''
+        for i_pred, image_pred in enumerate(tqdm(cat_range, bar_format=TQDM_FORMAT, desc=desc)):
+            pred_brain = nib.load(f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
 
             for i_test, image_test in enumerate(cat_range):
                 filename = f'data/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
@@ -205,8 +212,8 @@ def twinset_category_correlations(image_dir):
         pickle.dump(corr, file)
 
 
-# Plots twinset category-level analysis
 def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
+    """ Plots twinset category-level analysis """
     num_cat = p_stats.shape[0]
     categories = ['animals', 'objects', 'scenes', 'people', 'faces']
     colors = ['blue', 'orange', 'green', 'red', 'purple']
@@ -244,13 +251,17 @@ def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
 
 
 ### Participant level analysis:
-# Generates shuffled permutations for participant-level analysis for Twinset.
-def twinset_participant_permutations(n_shuffle=1000,
+def twinset_participant_permutations(fmri_dir,
+                                     n_shuffle=1000,
                                      print_vals=False,
-                                     force_resample=False,
-                                     image_dir=""):
+                                     force_resample=False):
+    """
+    Generates shuffled permutations for participant-level analysis for Twinset. 
+    print_vals -- will print significance values
+    force_resample -- re-generates correlations before calculating null distribution
+    """
     if force_resample:
-        twinset_participant_correlations(image_dir)
+        twinset_participant_correlations(fmri_dir)
 
     filename = f"data/twinset/correlations/corr_per_subj.pkl"
     full_corr = np.load(filename, allow_pickle=True)
@@ -261,7 +272,8 @@ def twinset_participant_permutations(n_shuffle=1000,
     real_diffs = np.empty((num_cat,), dtype=object)
     p_stats = np.empty((num_cat,2))
 
-    for c in tqdm(range(num_cat), desc="Generating permutations for each participant"):
+    desc="Generating permutations for each participant"
+    for c in tqdm(range(num_cat), bar_format=TQDM_FORMAT, desc=desc):
         corr = full_corr[c] # get specific corr matrix for subject
         corr = np.delete(corr, 19, axis=0)
         corr = np.delete(corr, 19, axis=1)
@@ -290,22 +302,26 @@ def twinset_participant_permutations(n_shuffle=1000,
     
     twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
-# Generates correlations between all predicted and real brains for each participant.
-# Called from twinset_participant_permutations() if correlations don't exist or if resampling.
-def twinset_participant_correlations(image_dir):
+
+def twinset_participant_correlations(fmri_dir):
+    """
+    Generates correlations between all predicted and real brains for each participant.
+    Called from twinset_participant_permutations() if correlations don't exist or if resampling.
+    """
     corr = np.zeros((15,), dtype=object)
     overlap = get_subj_overlap()
     num_images = 156
 
     total_num_images = 15 * num_images
-    with tqdm(total=total_num_images, desc='Generating correlations per participant') as pbar:
+    desc='Generating correlations per participant'
+    with tqdm(total=total_num_images, bar_format=TQDM_FORMAT, desc=desc) as pbar:
         for subj in range(0,15):
             subj_corr = np.zeros((num_images, num_images))
 
             for i_pred, image_pred in enumerate(range(1,num_images+1)):
                 pbar.update(1)
                 # if i_pred % 20 == 0: print(f"completed {i_pred} images")
-                pred_filename = f'{image_dir}/{"{:03d}".format(image_pred)}.nii.gz'
+                pred_filename = f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz'
                 pred_brain = nib.load(pred_filename).get_fdata()
                 for i_test, image_test in enumerate(range(1,num_images+1)):
                     filename = f'data/twinset/subj{"{:02d}".format(subj+1)}/' \
@@ -324,8 +340,8 @@ def twinset_participant_correlations(image_dir):
         pickle.dump(corr, file)
 
 
-# Plots twinset participant-level analysis
 def twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
+    """ Plots twinset participant-level analysis """
     num_cat = p_stats.shape[0]
     fig, ax = plt.subplots(figsize=(7,7))
     ax.scatter(range(1,16), real_diffs, marker='o', color='k', edgecolors='k', label='Real matrix')
@@ -361,15 +377,63 @@ def twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals
 
 
 ##### Partly Cloudy Analyses
-# Generates correlations between predicted and real brains, and with luminance and real brains.
-# Uses 100 bootstrapped averages of real brains for analyses, and generates those if don't exist
-# or if force_resample==True
-def generate_bootstrapped_correlations(true,
-                                       pred,
+def get_luminance(input_dir, TRs=168, center_crop=False):
+    """
+    Calculates the luminance of an image or set of images, and returns a 2-dim object
+    with luminance_value x number of frames. Expects an input_dir of image frames
+    center_crop -- specifies whether each image is resized or 'squished' to a square, vs. cropped.
+    """
+    if center_crop:
+        scaler = transforms.Compose([
+            transforms.Resize(224),
+            transforms.CenterCrop((224, 224))
+        ])
+    else:
+        scaler = transforms.Resize((224, 224))
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+    to_tensor = transforms.ToTensor()
+
+    mov = []
+    sorted_files = natsorted(glob.glob(f'{input_dir}/*'))
+    for i, filename in enumerate(tqdm(sorted_files, bar_format=TQDM_FORMAT, desc="Loading images")):
+        img = Image.open(filename)
+        t_img = Variable(normalize(to_tensor(scaler(img))))
+        image = t_img.data.numpy()
+        image = np.transpose(image, (1,2,0))
+
+        mov.append(image)
+
+    mov = np.asarray(mov)
+    downsampled_shape = np.concatenate((mov.T.shape[0:3], [TRs]))
+    mov_convd = np.zeros(downsampled_shape)
+    mov_flattened = mov.T.reshape((-1, mov.T.shape[-1]))
+    conv_flattened = conv_hrf_and_downsample(mov_flattened, 2, TRs)
+    mov_convd = conv_flattened.reshape((downsampled_shape))
+    mov_l = mov_convd.T
+
+    # calculate luminance based on RGB values, rescale to 0-255
+    y = mov_l[:,:,:,0]*0.2126 + mov_l[:,:,:,1]*0.7152 + mov_l[:,:,:,2]*0.0722
+    y = y[2:-8] # trim credits to match real response
+    y_flat = y.reshape((y.shape[0], -1))
+    y_flat -= np.min(y_flat)
+    y_flat /= np.max(y_flat)
+    y_flat *= 255
+
+    return y_flat
+
+
+def generate_bootstrapped_correlations(pred,
+                                       true,
                                        lum,
                                        TR_band=None,
                                        num_bootstraps=100,
                                        force_resample=False):
+    """ 
+    Generates correlations between predicted and real brains, and with luminance and real brains.
+    Uses 100 bootstrapped averages of real brains for analyses, and generates those if don't exist
+    or if force_resample==True.
+    """
     if TR_band != None:
         band = get_TR_band(TR_band, nTR=true.shape[0])
 
@@ -382,7 +446,8 @@ def generate_bootstrapped_correlations(true,
     notdiag = notdiag.astype(bool)
     corr = np.zeros((num_bootstraps, 2, nTR)) # (num_bootstraps x 2 correlations (pred,lum) x TR)
 
-    for i, b in enumerate(tqdm(range(num_bootstraps), desc='Generating and loading bootstraps')):
+    desc='Generating and loading bootstraps'
+    for i, b in enumerate(tqdm(range(num_bootstraps), bar_format=TQDM_FORMAT, desc=desc)):
         # Create bootstraps of real brains if don't exist, or if force_resample==True
         if (glob.glob(f'data/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz') == [] or
             force_resample):
@@ -406,8 +471,9 @@ def generate_bootstrapped_correlations(true,
                 corr[i,1,t] = stats.pearsonr(lum[t][band[t]], real[t][band[t]])[0]
     return corr
 
-# Plots the correlations with predicted brains and correlations with luminance model for movie
+
 def pc_pred_lum_timecourse(corr):
+    """ Plots the correlations with predicted brains and with luminance model for movie """
     num_bootstraps=corr.shape[0]
     nTR = corr.shape[-1]
     plt.figure(figsize=(15, 5))
@@ -441,8 +507,8 @@ def pc_pred_lum_timecourse(corr):
     plt.show()
 
 
-# Plots the difference in correlations btw predicted brains and luminance model for movie
 def pc_difference_timecourse(corr):
+    """ Plots the difference in correlations btw predicted brains and luminance model for movie """
     num_bootstraps=corr.shape[0]
     nTR = corr.shape[-1]
     plt.figure(figsize=(15, 5))
@@ -473,25 +539,28 @@ def pc_difference_timecourse(corr):
     plt.show()
 
 
-# Generates boundary triggered average analysis by randomly permuting human annotated boundaries
-# and averaging the correlations around those boundaries. By default, skips TRs that are ±2 TRs
-# from another boundary.
 def generate_boundary_triggered_averages(corr,
                                          num_boundary_bootstraps=10,
                                          skip_other_boundaries=True):
+    """
+    Generates boundary triggered average analysis by randomly permuting human annotated boundaries
+    and averaging the correlations around those boundaries. By default, skips TRs that are ±2 TRs
+    from another boundary.
+    """
     num_bootstraps = corr.shape[0]
     nTR = corr.shape[-1]
-    rand_bounds = np.zeros((num_bootstraps * num_boundary_bootstraps, len(PC_EVENT_BOUNDS[1:])))
-    for i in range(num_bootstraps * num_boundary_bootstraps):
+    total_num_bootstraps = num_bootstraps * num_boundary_bootstraps
+    rand_bounds = np.zeros((total_num_bootstraps, len(PC_EVENT_BOUNDS[1:])))
+    for i in range(total_num_bootstraps):
         rand_bounds[i,:] = np.random.choice(PC_EVENT_BOUNDS[1:],
                                             size=len(PC_EVENT_BOUNDS[1:]),
                                             replace=True)
 
-    bound_averages = np.full((2,21,num_bootstraps * num_boundary_bootstraps), np.nan)
+    bound_averages = np.full((2, 21, total_num_bootstraps), np.nan)
     window = range(-10, 11)
 
     description = 'Generating bootstrapped boundaries'
-    for s in tqdm(range(num_bootstraps * num_boundary_bootstraps), desc=description):
+    for s in tqdm(range(total_num_bootstraps), bar_format=TQDM_FORMAT, desc=description):
         brain_idx = s % num_bootstraps
         for i, tr in enumerate(window):
             pred_avg = 0
@@ -539,13 +608,12 @@ def generate_boundary_triggered_averages(corr,
     return bound_averages
 
 
-
 def pc_bootstrapped_pred_lum_4TRs(bound_averages):
+    """ Plots pred and lum correlations for boundary triggered average analysis for ±4TRs """
     nTR = bound_averages.shape[1]
     fig, ax = plt.subplots(figsize=(7,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
 
-    sorted_arr = np.sort(bound_averages, axis=2)
     ax.plot(bound_averages[0,6:15], color='blue', alpha = 0.008,)
     ax.plot(bound_averages[1,6:15], color='green', alpha = 0.008,)
 
@@ -572,7 +640,9 @@ def pc_bootstrapped_pred_lum_4TRs(bound_averages):
 
     plt.show()
 
+
 def pc_bootstrapped_difference_4TRs(bound_averages):
+    """ Plots difference between boundary triggered average correlations for ±4TRs """
     nTR = bound_averages.shape[1]
     fig, ax = plt.subplots(figsize=(7,5))
     plt.tick_params(axis='x', top=False, labeltop=False)
@@ -621,6 +691,7 @@ def get_TR_band(bandwidth, nTR):
 
 
 def num_bootstraps_below_zero(diffs):
+    """ Returns number of samples below zero for calculating p-values on difference plots """
     len_diffs = diffs.shape[0]
     num_bootstraps = diffs.shape[1]
 
@@ -632,8 +703,9 @@ def num_bootstraps_below_zero(diffs):
 
     return (num_below_zero+1) / (num_bootstraps+1)
 
-# returns zscore of sum of zscored (+ra, +dcto) individual real brains
+
 def average_subject_permutation(subject_list):
+    """ Returns avg (zscore of sum of zscored (+ra, +dcto)) of a given sample of real brains """
     init_filename = f'derivatives/init_brain.nii.gz' # For initializing brain
     init_brain_nib = nib.load(init_filename)
     sum_brains = np.full((init_brain_nib.shape), np.nan)
@@ -650,9 +722,8 @@ def average_subject_permutation(subject_list):
 
 
 ##### Plotting functions:
-
-# Plots correlation matrices for Partly Cloudy analyses
 def plot_correlation_matrices(pred, real, lum):
+    """ Plots correlation matrices for Partly Cloudy analyses """
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
     axes[0].imshow(pred, vmin=-1, vmax=1)
     axes[1].imshow(real, vmin=-1, vmax=1)
@@ -668,8 +739,9 @@ def plot_correlation_matrices(pred, real, lum):
                 size=16, weight='bold')
     fig.suptitle('Correlation matrices for Partly Cloudy', fontsize=16, y=1)
 
-# Plots correlatoin matrices for preprocessing steps
+
 def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
+    """ Plots correlation matrices for preprocessing steps """
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(16,4))
     axes[0].imshow(np.corrcoef(pred_voxels.T), vmin=-1, vmax=1)
     axes[1].imshow(np.corrcoef(conv[:, 2:].T), vmin=-1, vmax=1)
@@ -678,9 +750,9 @@ def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
     cbar_ax = fig.add_axes([0.35, -0.05, 0.33, 0.05])
     fig.colorbar(im, cax=cbar_ax, shrink=0.6, orientation='horizontal')
     axes[0].set_xlabel('Predicted response', fontsize=12)
-    axes[1].set_xlabel('Convolved and downsampled', fontsize=12)
-    axes[2].set_xlabel('Average removed', fontsize=12)
-    axes[3].set_xlabel('DCT removed', fontsize=12)
+    axes[1].set_xlabel('Convolve w/ HRF, downsample', fontsize=12)
+    axes[2].set_xlabel('Remove average', fontsize=12)
+    axes[3].set_xlabel('Remove DCT', fontsize=12)
 
     for a, ax in enumerate(axes.ravel()):
         ax.text(-0.13, -.15, string.ascii_lowercase[a], transform=ax.transAxes, 
@@ -689,10 +761,13 @@ def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
                  fontsize=16, y=.95)
 
 
-# Plots significance markers
+# Asterisk code modified from https://stackoverflow.com/a/52333561
 def plot_significance_asterisk(x, data, max_y, maxasterix=None, fs=12):
-    # † is <0.075,      * is p < 0.05
-    # ** is p < 0.01,   *** is p < 0.001, etc.
+    """
+    Plots significance markers
+    † is <0.075,      * is p < 0.05
+    ** is p < 0.01,   *** is p < 0.001, etc.
+    """
     text = "\u2020" if data < 0.075 and data > 0.05 else ""
 
     p = .05 
@@ -716,10 +791,12 @@ def plot_significance_asterisk(x, data, max_y, maxasterix=None, fs=12):
         xticks = ax.get_xticks()
 
 
-# Plots significance markers for boundary triggered average analysis
 def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
-    # † is <0.075,      * is p < 0.05
-    # ** is p < 0.01,   *** is p < 0.001, etc.
+    """
+    Plots significance markers for boundary triggered average analysis
+    † is <0.075,      * is p < 0.05
+    ** is p < 0.01,   *** is p < 0.001, etc.
+    """
     # Get signifiance marker (if any) for each TR
     asterisks = np.empty((len(data)),dtype=object)
     for i, d in enumerate(data):
@@ -774,16 +851,16 @@ def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
                        (l_of_t[-1]+0.425)/xticks[-1],
                        linestyle='-', color='black')
 
-# Multicolor patch code assisted from https://stackoverflow.com/a/67870930/12685473
-# Define an object that will be used by the legend
+# Multicolor patch code below assisted from https://stackoverflow.com/a/67870930/12685473
 class MulticolorPatch(object):
+    """ Define an object that will be used by the legend """
     def __init__(self, colors, alpha=1):
         self.colors = colors
         self.alpha = alpha
 
 
-# define a handler for the MulticolorPatch object
 class MulticolorPatchHandler(object):
+    """ Define a handler for the MulticolorPatch object """
     def legend_artist(self, legend, orig_handle, fontsize, handlebox):
         width, height = handlebox.width, handlebox.height
         patches = []

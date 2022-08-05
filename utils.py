@@ -1,35 +1,29 @@
-import numpy as np
-import matplotlib.pyplot as plt
-import pandas as pd
-from sklearn.linear_model import Ridge, LinearRegression
-import pickle
-from scipy import stats
-import h5py
-import cv2
-
-import torchvision.transforms as transforms
-from torch.autograd import Variable
-from PIL import Image
-
-from pathlib import Path
-import argparse
+"""
+Analysis and validation functions for imgtofmri python package tutorial.
+Tutorial and analysis found at: https://github.com/dpmlab/imgtofmri
+Author: Maxwell Bennett mbb2176@columbia.edu
+"""
 import os
 import glob
-
-import nibabel as nib
-from nipype.interfaces import afni
-from nipype.interfaces import fsl
-
 from natsort import natsorted
-
 from tqdm import tqdm, trange
 
+import numpy as np
+from sklearn.linear_model import LinearRegression
+import h5py
+import cv2
+import nibabel as nib
+
+
+TQDM_FORMAT = '{l_bar}{bar:10}{r_bar}{bar:-10b}'
 MNI_SHAPE = (91, 109, 91)
 
 
-# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
-# Works for all 5 ROIs, and returns a given voxel index if voxel value (post smoothing) > threshold.
 def get_subj_overlap(rois=['LOC', 'PPA', 'RSC']):
+    """
+    Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
+    Works for all 5 ROIs; returns a given voxel index if voxel value (post smoothing) > threshold.
+    """
     threshold = 0.15
     for roi_idx, roi in enumerate(rois):
         for subj in range(0,3):
@@ -45,9 +39,11 @@ def get_subj_overlap(rois=['LOC', 'PPA', 'RSC']):
     return subject_overlap
 
 
-# Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
-# Works for all 5 ROIs, and returns a given voxel index if voxel value of bool mask > threshold.
 def get_subj_overlap_nonsmoothed(rois=['LOC', 'PPA', 'RSC']):
+    """
+    Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs.
+    Works for all 5 ROIs, and returns a given voxel index if voxel value of bool mask > threshold.
+    """
     threshold = 0.15
     for roi_idx, roi in enumerate(rois):
         for subj in range(0,3):
@@ -63,8 +59,8 @@ def get_subj_overlap_nonsmoothed(rois=['LOC', 'PPA', 'RSC']):
     return subject_overlap
 
 
-# Extracts frames from an input movie at 2Hz and saves them to the output_dir.
 def extract_frames(input_file, output_dir):
+    """ Extracts frames from an input movie at 2Hz and saves them to the output_dir. """
     vidcap = cv2.VideoCapture(input_file)
     success, image = vidcap.read()
     if not success:
@@ -73,7 +69,7 @@ def extract_frames(input_file, output_dir):
         os.makedirs(output_dir)
     except FileExistsError:
         pass
-    
+
     frame_count = vidcap.get(cv2.CAP_PROP_FRAME_COUNT)
     framerate = vidcap.get(cv2.CAP_PROP_FPS)
     movie_length = frame_count / framerate
@@ -81,8 +77,9 @@ def extract_frames(input_file, output_dir):
     frames_to_skip = 30
     msec_count = 0
     frame_count = 1
-    
-    with tqdm(total=int(movie_length * 2) + 1, desc='Saving movie frames') as pbar:
+
+    desc = 'Saving movie frames'
+    with tqdm(total=int(movie_length * 2) + 1, bar_format=TQDM_FORMAT, desc=desc) as pbar:
         while msec_count < movie_length * 1000:
             vidcap.set(cv2.CAP_PROP_POS_MSEC, msec_count)
             success,image = vidcap.read()
@@ -93,27 +90,29 @@ def extract_frames(input_file, output_dir):
     vidcap.release()
 
 
-# Loads fMRI responses to individual frames from input_dir in sorted order and returns a 4D volume 
 def load_frames(input_dir):
+    """ Loads fMRI responses of frames from input_dir in sorted order and returns a 4D volume """
     sorted_files = natsorted(glob.glob(f'{input_dir}/*'))
     movie_response_shape = np.concatenate((MNI_SHAPE, [len(sorted_files)]))
     movie_response = np.full((movie_response_shape), np.nan)
-    
-    for i, filename in enumerate(tqdm(sorted_files, desc="Loading movie frames")):
+
+    desc = "Loading movie frames"
+    for i, filename in enumerate(tqdm(sorted_files, bar_format=TQDM_FORMAT, desc=desc)):
         movie_response[...,i] = nib.load(filename).get_fdata()
     return movie_response
 
 
 ##### Pre-processing functions:
 def remove_average_activity(a):
+    """ removes average activity from analysis """
     b = np.zeros(a.shape)
-    for img in trange(a.shape[-1], desc='Removing average activity'): 
+    for img in trange(a.shape[-1], bar_format=TQDM_FORMAT, desc='Removing average activity'): 
         b[...,img] = a[...,img] - np.mean(a, axis=-1)
     return b
 
 
-# Remove drift artifacts using discrete cosine transform
 def remove_DCT(a):
+    """  Remove drift artifacts using discrete cosine transform """
     period_cut = 120 # threshold for low-pass filter
     timepoints = 168 # TRs
     timestep = 2 
@@ -131,10 +130,35 @@ def remove_DCT(a):
     return brain
 
 
-# Remove nuisance artifacts from Partly Cloudy dataset
+def conv_hrf_and_downsample(E, TR=2, nTR=168):
+    """ Convolve and downsample movie timecourse to TR timecourse """
+    T = E.shape[-1]
+
+    # HRF (from AFNI)
+    dt = np.arange(0, 15, step=0.5)
+    p = 8.6
+    q = 0.547
+    hrf = np.power(dt / (p * q), p) * np.exp(p - dt / q)
+
+    # Convolve frame timecourse with HRF
+    initial_timecourse = np.zeros(E.shape)
+    for x in trange(E.shape[0], bar_format=TQDM_FORMAT, desc='Convolving with HRF'):
+        initial_timecourse[x,:] = np.convolve(E[x,:], hrf)[:T]
+
+    # Downsample frame timecourse to TR timecourse
+    timepoints = np.linspace(0, T, nTR)
+    downsampled = np.zeros((E.shape[0], len(timepoints)))
+    for x in trange(E.shape[0], bar_format=TQDM_FORMAT, desc='Downsampling'):
+        downsampled[x,:] = np.interp(timepoints, np.arange(0, T), initial_timecourse[x,:])
+
+    return downsampled
+
+
 def regress_out(true_dir):
+    """ Remove nuisance artifacts from Partly Cloudy dataset """
     for subj in range(123,156):
-        regressor = h5py.File(f'{true_dir}/sub-pixar{subj}/sub-pixar{subj}_task-pixar_run-001_ART_and_CompCor_nuisance_regressors.mat', 'r')
+        regressor = h5py.File(f'{true_dir}/sub-pixar{subj}/sub-pixar{subj}_task-pixar_run-001_ART'\
+                               '_and_CompCor_nuisance_regressors.mat', 'r')
         regressor = regressor['R']
         regressor = np.asarray(regressor).T 
 
@@ -155,32 +179,8 @@ def regress_out(true_dir):
              f'{true_dir}/sub-pixar{subj}/subj{subj}_r_ro.nii.gz')
 
 
-# Convolve and downsample movie timecourse to TR timecourse
-def convolve_and_downsample(E, TR=2, nTR=168):
-    T = E.shape[-1]
-
-    # HRF (from AFNI)
-    dt = np.arange(0, 15, step=0.5)
-    p = 8.6
-    q = 0.547
-    hrf = np.power(dt / (p * q), p) * np.exp(p - dt / q)
-
-    # Convolve frame timecourse with HRF
-    initial_timecourse = np.zeros(E.shape)
-    for x in trange(E.shape[0], desc='Convolving with HRF'):
-        initial_timecourse[x,:] = np.convolve(E[x,:], hrf)[:T]
-
-    # Downsample frame timecourse to TR timecourse
-    timepoints = np.linspace(0, T, nTR)
-    downsampled = np.zeros((E.shape[0], len(timepoints)))
-    for x in trange(E.shape[0], desc='Downsampling'):
-        downsampled[x,:] = np.interp(timepoints, np.arange(0, T), initial_timecourse[x,:])
-
-    return downsampled
-
-
-# Used to downsample human annotated event bounds from partly cloudy to TR space
 def pc_event_bounds(offset = 0):
+    """ Used to downsample human annotated event bounds from partly cloudy to TR space """
     # 13 bounds (+2 endpoints) == 14 events
     bounds_seconds = [23, 52, 60+30, 60+53, 120+24, 120+46,
                       180+8, 180+33, 240+3, 240+12, 240+40, 240+53, 300+11]
@@ -197,60 +197,16 @@ def pc_event_bounds(offset = 0):
     downsample = np.interp(timepoints, np.arange(0, nSec), mov)
     
     bounds = np.where(downsample > 0)[0]
-    # print(f"bounds downsampled, +6 for hrf: {bounds}")
     bounds -= 2 # offset from beginning credits
     
     bounds += offset
     bounds = np.concatenate(([0], bounds, [nTR]))
 
     bounds[-1] = nTR - 10 # subtract 10 == -(2 opening credit TRs, 8 ending credit TRs)
-    # print(bounds)
-
     return bounds
 
 
-# Calculates the luminance of an image or set of images, and returns a 2-dim object
-# with luminance_value x number of frames. Expects an input_dir of image frames
-def get_luminance(conv=True, input_dir="partly_cloudy_frames", TRs=168, center_crop=False):
-    if center_crop:
-        scaler = transforms.CenterCrop((224, 224))
-    else:
-        scaler = transforms.Resize((224, 224))
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    to_tensor = transforms.ToTensor()
-
-    mov = []
-    sorted_files = natsorted(glob.glob(f'{input_dir}/*'))
-    for i, filename in enumerate(tqdm(sorted_files, desc="Loading images")):
-        img = Image.open(filename)
-        t_img = Variable(normalize(to_tensor(scaler(img))))
-        image = t_img.data.numpy()
-        image = np.transpose(image, (1,2,0))
-
-        mov.append(image)
-
-    mov = np.asarray(mov)
-    downsampled_shape = np.concatenate((mov.T.shape[0:3], [TRs]))
-    mov_convd = np.zeros(downsampled_shape)
-
-    mov_flattened = mov.T.reshape((-1, mov.T.shape[-1]))
-    conv_flattened = convolve_and_downsample(mov_flattened, 2, TRs)
-    mov_convd = conv_flattened.reshape((downsampled_shape))
-
-    mov_l = mov_convd.T
-
-    y = mov_l[:,:,:,0]*0.2126 + mov_l[:,:,:,1]*0.7152 + mov_l[:,:,:,2]*0.0722
-    y = y[2:-8]
-    y_flat = y.reshape((y.shape[0], -1))
-    y_flat -= np.min(y_flat)
-    y_flat /= np.max(y_flat)
-    y_flat *= 255
-
-    return y_flat
-
-############################################
-# The functions in this section have been copied from nipype's confounds.py
+# This function has been copied from nipype's confounds.py
 def _cosine_drift(period_cut, frametimes):
     """Create a cosine drift matrix with periods greater or equals to period_cut
     Parameters
@@ -282,5 +238,3 @@ def _cosine_drift(period_cut, frametimes):
 
     cdrift[:, order - 1] = 1.0  # or 1./sqrt(len_tim) to normalize
     return cdrift
-
-############################################
