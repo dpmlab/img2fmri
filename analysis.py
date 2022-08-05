@@ -499,10 +499,6 @@ def pc_pred_lum_timecourse(corr):
     plt.title("Similarity between timepoint-timepoint correlation matrices \n"
               "for predicted response with real response, and luminance model with real response",
               fontsize=14)
-    # plt.title("Event structure similarity from correlation matrices " \
-    #           "with bootstrapped sampling of real fMRI responses", fontsize=14)
-    # plt.title("Row by row correlation of correlation matrices " \
-    #           "with bootstrapped sampling of real fMRI responses", fontsize=14)
     axes.set_xlabel("Movie timecourse (TRs, TR=2s)", fontsize=12)
     plt.show()
 
@@ -530,12 +526,8 @@ def pc_difference_timecourse(corr):
     axes.legend(h,l,fontsize='large',loc='lower right')
     axes.set_xlabel("Movie timecourse (TRs, TR=2s)", fontsize=12)
     plt.title("Difference between timepoint-timepoint correlation matrix similarities \n"
-              "for predicted response with real response, and luminance model with real response",
+              "for predicted response with real response versus luminance model with real response",
               fontsize=14)
-    # plt.title("Difference between event structure similarity from correlation matrices" \
-    #         "with bootstrapped sampling of real fMRI responses", fontsize=14)
-    # plt.title("Difference between row by row correlations of correlation matrices " \
-    #         "with bootstrapped sampling of real fMRI responses", fontsize=14)
     plt.show()
 
 
@@ -634,8 +626,7 @@ def pc_bootstrapped_pred_lum_4TRs(bound_averages):
     l.append('corr(predicted, real)')
     h.reverse(); l.reverse() # corrects ordering of legend and handles
     ax.legend(h,l,fontsize='medium',loc='lower right')
-    plt.title("Boundary triggered average of correlation matrices \n with bootstrapping boundaries",
-              fontsize=14)
+    plt.title("Boundary triggered average of model similarities", fontsize=14)
     ax.set_xlabel("TRs surrounding boundary (TR=2s)", fontsize=12)
 
     plt.show()
@@ -665,10 +656,7 @@ def pc_bootstrapped_difference_4TRs(bound_averages):
     l.append('corr(predicted, real) - corr(luminance, real)')
     h.reverse(); l.reverse() # corrects ordering of legend and handles
     ax.legend(h,l,fontsize='medium',loc='lower right')
-    # plt.title("Event structure similarity from correlation matrices " \
-    #           "with bootstrapped sampling of real fMRI responses")
-    plt.title("Boundary triggered average of difference \n" \
-              "between correlation matrices with bootstrapping boundaries", fontsize=14)
+    plt.title("Boundary triggered average of difference in model similarities", fontsize=14)
     ax.set_xlabel("TRs surrounding boundary (TR=2s)", fontsize=12)
 
     max_y = diffs.max()
