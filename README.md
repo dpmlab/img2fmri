@@ -16,7 +16,7 @@ Subsequently, users are encouraged to create a new [Conda](https://docs.conda.io
     python -m pip install -r requirements.txt
 
 ## Usage
-Users are _strongly_ encouraged to view the **overview.ipynb** file, which shows the import and use of the `imgtofmri.predict()` function, as well as its extension to movies using `utils.extract_frames()` and `utils.load_frames()`.
+Users are _strongly_ encouraged to view the **[overview.ipynb](overview.ipynb)** file, which shows the import and use of the `imgtofmri.predict()` function, as well as its extension to movies using `utils.extract_frames()` and `utils.load_frames()`.
 
 **imgtofmri** can also be used as a command line interface, as:
 
