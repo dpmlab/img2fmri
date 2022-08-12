@@ -320,7 +320,6 @@ def twinset_participant_correlations(fmri_dir):
 
             for i_pred, image_pred in enumerate(range(1,num_images+1)):
                 pbar.update(1)
-                # if i_pred % 20 == 0: print(f"completed {i_pred} images")
                 pred_filename = f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz'
                 pred_brain = nib.load(pred_filename).get_fdata()
                 for i_test, image_test in enumerate(range(1,num_images+1)):
@@ -424,7 +423,7 @@ def get_luminance(input_dir, TRs=168, center_crop=False):
 
 
 def generate_bootstrapped_correlations(pred,
-                                       true,
+                                       real,
                                        lum,
                                        TR_band=None,
                                        num_bootstraps=100,
@@ -435,7 +434,7 @@ def generate_bootstrapped_correlations(pred,
     or if force_resample==True.
     """
     if TR_band != None:
-        band = get_TR_band(TR_band, nTR=true.shape[0])
+        band = get_TR_band(TR_band, nTR=real.shape[0])
 
     init_subj_TRs = f'derivatives/init_brain.nii.gz'
     init_subj_nib = nib.load(init_subj_TRs)
@@ -562,7 +561,7 @@ def generate_boundary_triggered_averages(corr,
                 if b+tr >= nTR:
                     continue
 
-                # check to see if hitting ±2 TRs from a different boundary?
+                # check to see if hitting ±2 TRs from a different boundary
                 if skip_other_boundaries:
                     hum_bounds_temp = np.array(PC_EVENT_BOUNDS[1:])
                     
@@ -581,21 +580,14 @@ def generate_boundary_triggered_averages(corr,
                 count_bounds += 1
 
             # Catch an extremely rare case where the permutation of boundaries includes no valid
-            # TRs given proximity to other boundaries. Sets value to nan, and eventually to mean.
+            # TRs given proximity to other boundaries. Value = nan and is then factored into p-calc.
             try: pred_avg /= count_bounds
             except: pred_avg = np.nan
-
             try: lum_avg /= count_bounds
             except: lum_avg = np.nan
 
             bound_averages[0,i,s] = pred_avg
             bound_averages[1,i,s] = lum_avg
-
-    # Resolves rare case explained above
-    num_nans = np.argwhere(np.isnan(bound_averages)).shape[0] // 2 
-    for _, b, c in np.argwhere(np.isnan(bound_averages))[:num_nans]:
-        bound_averages[0,b,c] = np.nanmean(bound_averages[0,b,:])
-        bound_averages[1,b,c] = np.nanmean(bound_averages[1,b,:])
 
     return bound_averages
 
@@ -678,17 +670,20 @@ def get_TR_band(bandwidth, nTR):
 
 
 def num_bootstraps_below_zero(diffs):
-    """ Returns number of samples below zero for calculating p-values on difference plots """
+    """ Returns number of samples below zero for calculating p-values on bound. trig. avg. plots """
     len_diffs = diffs.shape[0]
     num_bootstraps = diffs.shape[1]
 
     num_below_zero = np.zeros((len_diffs))
+    num_nans = np.zeros((len_diffs))
     for i in range(0, len_diffs):
         for b in range(num_bootstraps):
             if diffs[i,b] < 0:
                 num_below_zero[i] += 1
+            elif np.isnan(diffs[i,b]): # ensure not counting invalid permutations towards signif.
+                num_nans[i] += 1
 
-    return (num_below_zero+1) / (num_bootstraps+1)
+    return (num_below_zero + 1) / (num_bootstraps - num_nans + 1)
 
 
 def average_subject_permutation(subject_list):
@@ -752,10 +747,10 @@ def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
 def plot_significance_asterisk(x, data, max_y, maxasterix=None, fs=12):
     """
     Plots significance markers
-    † is <0.075,      * is p < 0.05
+    † is <0.10,       * is p < 0.05
     ** is p < 0.01,   *** is p < 0.001, etc.
     """
-    text = "\u2020" if data < 0.075 and data > 0.05 else ""
+    text = "\u2020" if data < 0.1 and data >= 0.05 else ""
 
     p = .05 
     if data < p:
@@ -781,13 +776,13 @@ def plot_significance_asterisk(x, data, max_y, maxasterix=None, fs=12):
 def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
     """
     Plots significance markers for boundary triggered average analysis
-    † is <0.075,      * is p < 0.05
+    † is <0.10,       * is p < 0.05
     ** is p < 0.01,   *** is p < 0.001, etc.
     """
     # Get signifiance marker (if any) for each TR
     asterisks = np.empty((len(data)),dtype=object)
     for i, d in enumerate(data):
-        text = "\u2020" if d < 0.075 and d > 0.05 else ""
+        text = "\u2020" if d < 0.1 and d >= 0.05 else ""
         p = .05 
         if d < p:
             text += "*"

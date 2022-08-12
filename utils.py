@@ -112,7 +112,10 @@ def remove_average_activity(a):
 
 
 def remove_DCT(a):
-    """  Remove drift artifacts using discrete cosine transform """
+    """
+    Remove high-pass filtered activity over 120s (period_cut) by regressing out a
+    discrete cosine transformation (DCT) basis set.
+    """
     period_cut = 120 # threshold for low-pass filter
     timepoints = 168 # TRs
     timestep = 2 
