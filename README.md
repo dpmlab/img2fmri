@@ -16,8 +16,9 @@ After cloning this repository, users should install [Conda](https://docs.conda.i
     conda create --name name_of_environment python=3.9
     conda activate name_of_environment
 
-Users can change directories to this repository, then install package dependencies with:
+Users can enter this repository, then install package dependencies with:
 
+    cd imgtofmri
     python -m pip install -r requirements.txt
 
 Users are now able to use the command-line interface for predicting fMRI responses as outlined in the section below.
