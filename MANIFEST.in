@@ -1,0 +1,12 @@
+recursive-include img2fmri/derivatives/ *
+recursive-include img2fmri/models/ *
+recursive-include img2fmri/tests/ *
+recursive-include img2fmri/tests/test_data/ *.mp4
+recursive-include img2fmri/tests/test_data/images/ *
+
+recursive-exclude img2fmri/temp *
+recursive-exclude img2fmri/tests/temp/ *
+recursive-exclude img2fmri/tests/test_data/output/ *
+
+
+global-exclude *.pyc *.o .DS_Store

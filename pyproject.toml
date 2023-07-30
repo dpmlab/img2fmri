@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["img2fmri*"]
+
+[tool.setuptools.package-data]
+img2fmri = ["img2fmri/derivatives/*", "img2fmri/tests/*"]
+
+[tool.setuptools.exclude-package-data]
+img2fmri = [".gitattributes", "*.DS_STORE"]
+
+[project]
+name = "img2fmri"
+version = '0.2.dev1'
+authors = [
+  { name="Max Bennett", email="mbb2176@columbia.edu" },
+]
+description = "img2fmri: a python package for predicting group-level fMRI responses to visual stimuli using deep neural networks"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+  "nibabel>=5.1.0",
+  "nipype>=1.8",
+  "numpy>=1.25.1",
+  "joblib>=1",
+  "natsort>=8.4.0",
+  "opencv-python>=4",
+  "Pillow>=10",
+  "scikit-learn>=1.3.0",
+  "scipy>=1.11.1",
+  "torch>=2.0.1",
+  "torchvision>=0.15.2",
+  "tqdm>=4.65.0",
+  "pytest>=7.1",
+]
+
+[project.scripts]
+img2fmri = "img2fmri.predict:_CLI_interface"
+
+[project.urls]
+"Homepage" = "https://github.com/dpmlab/img2fmri"
+"Bug Tracker" = "https://github.com/dpmlab/img2fmri/issues"  

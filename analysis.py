@@ -1,6 +1,6 @@
 """
-Analysis and validation functions for imgtofmri python package tutorial.
-Tutorial and analysis found at: https://github.com/dpmlab/imgtofmri
+Analysis and validation functions for img2fmri python package tutorial.
+Tutorial and analysis found at: https://github.com/dpmlab/img2fmri
 Author: Maxwell Bennett mbb2176@columbia.edu
 """
 import sys
@@ -24,24 +24,150 @@ from torch.autograd import Variable
 
 import nibabel as nib
 
-from utils import get_subj_overlap, conv_hrf_and_downsample
+from img2fmri.utils import get_subj_overlap, conv_hrf_and_downsample
 
 ALL_ROIS = ["EarlyVis", "OPA", "LOC", "RSC", "PPA"]
 TWINSET_CATEGORIES = ['animals', 'objects', 'scenes', 'people', 'faces']
 PC_EVENT_BOUNDS = [0, 12, 26, 44, 56, 71, 81, 92, 104, 119, 123, 136, 143, 151]
-TQDM_FORMAT = '{l_bar}{bar:10}{r_bar}{bar:-10b}'
+TQDM_FORMAT = '{l_bar}{bar:10}| {n}/{total_fmt} [{elapsed}<{remaining}]'
 
 
 ##### Functions for Twinset Analyses:
+### ROI-level analysis:
+def twinset_ROI_permutations(fmri_dir, 
+                             n_shuffle=1000, 
+                             print_vals=False, 
+                             force_resample=False):
+    """ 
+    Generates shuffled permutations for group-level ROI analysis for Twinset.
+    n_shuffle -- number of shuffles/permutations made in analysis
+    print_vals -- will print significance values
+    force_resample -- re-generates correlations before calculating null distribution
+    """
+    if force_resample:
+        twinset_ROI_correlations(fmri_dir)
+
+    filename = f"data/twinset/correlations/corr_avg_brains_per_roi.pkl"
+    full_corr = np.load(filename, allow_pickle=True)
+    num_roi = full_corr.shape[0]
+    num_resample = n_shuffle
+    shuffled_diffs = np.empty((num_roi,num_resample,), dtype=float)
+    real_diffs = np.empty((num_roi,), dtype=object)
+    p_stats = np.empty((num_roi,2))
+
+    for r in range(num_roi):
+        corr = full_corr[r]
+        # Remove the duplicate image from training set from this analysis
+        corr = np.delete(corr, 19, axis=0)
+        corr = np.delete(corr, 19, axis=1)
+            
+        # Calculate difference in unshuffled matrix 
+        offdiag = (1-np.diag(np.ones(corr.shape[0]))).astype(bool)
+        real_difference = np.diag(corr).mean() - corr[offdiag].mean()
+        real_diffs[r] = real_difference
+
+        # Generate shuffled permutation matrices
+        resampled = np.zeros((num_resample, 2))
+        roi_diffs = np.zeros(num_resample)
+        count_over_real = 0
+        desc = f'Generating permutations for \'{ALL_ROIS[r]}\''
+        for i in tqdm(range(num_resample), bar_format=TQDM_FORMAT, ncols=100, desc=desc):
+            df = pd.DataFrame(corr) # reset dataframe
+            df = df.sample(frac=1).reset_index(drop=True) # take random sample
+            df = pd.DataFrame.to_numpy(df)
+
+            resampled[i, 0] = np.diag(df).mean()
+            resampled[i, 1] = df[offdiag].mean()
+            roi_diffs[i] = np.diag(df).mean() - df[offdiag].mean()
+            if np.diag(df).mean() - df[offdiag].mean() >= real_difference:
+                count_over_real += 1
+
+        p_stats[r,0] = (count_over_real + 1)/(num_resample + 1)
+        shuffled_diffs[r] = roi_diffs
+
+    twinset_ROI_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
+
+
+def twinset_ROI_correlations(fmri_dir='data'):
+    """
+    Generates correlations between all predicted and group-averaged brains.
+    Called from twinset_group_permutations() if correlations don't exist or if resampling.
+    """
+    corr = np.zeros((5,), dtype=object)
+    num_images = 156
+    rng = range(1,157)
+    for roi_idx, roi in enumerate(ALL_ROIS):
+        overlap = get_subj_overlap([roi])
+        roi_corr = np.zeros((num_images, num_images))
+        desc = f'Generating correlations for \'{roi}\''
+        for i_pred, image_pred in enumerate(tqdm(rng, bar_format=TQDM_FORMAT, ncols=100, desc=desc)):
+            pred_file = f'{fmri_dir}/twinset_{roi}/{"{:03d}".format(image_pred)}.nii.gz'
+            pred_brain = nib.load(pred_file).get_fdata()
+            pred_overlap = pred_brain[overlap]
+            for i_test, image_test in enumerate(range(1,157)):
+                filename = f'data/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
+                true_brain = nib.load(filename).get_fdata()
+                true_overlap = true_brain[overlap]
+
+                pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0]
+                roi_corr[i_pred, i_test] = pearson_r
+        
+        corr[roi_idx] = roi_corr
+    
+    print(f"Completed generating per-ROI correlations. \n", file=sys.stderr)
+    pkl_filename = f"data/twinset/correlations/corr_avg_brains_per_roi.pkl"
+    pickle.dump(corr, open(pkl_filename, 'wb'))
+
+
+def twinset_ROI_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
+    """ Plots twinset group-level ROI analysis """
+    num_roi = p_stats.shape[0]
+    colors = ['blue', 'orange', 'green', 'red', 'purple']
+    fig, ax = plt.subplots(figsize=(7,7))
+    plotparts = ax.violinplot(shuffled_diffs.T, showextrema = False)
+    for i, p in enumerate(plotparts['bodies']):
+        p.set_edgecolor(colors[i])
+        p.set_facecolor(colors[i])
+        p.set_alpha(.5)
+
+    ax.scatter(range(1,6), real_diffs, marker='o', color='k', edgecolors='k', label='Real matrix')
+    ax.set_title("Difference between diagonal and off-diagonal \n" \
+                 " for correlation matrix of predicted and real brains")
+    ax.set_xlabel("Region of Interest (ROI)", fontsize=12)
+    ax.set_ylabel("Diagonal - off-diagonal", fontsize=12)
+    ax.set_xticks(range(1,6))
+    ax.set_xticklabels(ALL_ROIS, fontsize=12)
+    for i, xtick, p in zip(range(num_roi), ax.get_xticks(), p_stats[:,0]):
+        max_y = max(real_diffs[i].max(), shuffled_diffs[i].max())
+        plot_significance_asterisk(xtick, p, max_y, fs=16)
+
+    # add the multicolor category patch to legend
+    h, l = ax.get_legend_handles_labels()
+    h.append(MulticolorPatch(colors, alpha=0.5))
+    l.append("Null distribution")
+    ax.legend(h, l, loc="lower left", fontsize=12,
+             handler_map={MulticolorPatch: MulticolorPatchHandler()})
+    
+    if print_vals:
+        for c in range(num_roi):
+            print(f'ROI: {ALL_ROIS[c]}')
+            print(f"Real difference:      {real_diffs[c]:.8f}")
+            print(f"Mean null difference: {np.mean(shuffled_diffs[c]):.8f}")
+            print(f"p value:              {p_stats[c,0]:.8f}\n")
+
 ### Group-level analysis:
-def twinset_group_permutations(fmri_dir, n_shuffle=10000, print_vals=False, force_resample=False):
+def twinset_group_permutations(fmri_dir,
+                               roi_list=['LOC', 'RSC', 'PPA'],
+                               n_shuffle=10000,
+                               print_vals=False,
+                               force_resample=False):
     """
     Generates shuffled permutations for group-level analysis for Twinset.
     print_vals -- will print significance values
     force_resample -- re-generates correlations before calculating null distribution
     """
     if force_resample:
-        twinset_group_correlations(fmri_dir)
+        twinset_group_correlations(fmri_dir, roi_list=roi_list)
 
     corr = np.zeros((156, 156))
     filename = f"data/twinset/correlations/corr_avg_brains.pkl"
@@ -75,21 +201,22 @@ def twinset_group_permutations(fmri_dir, n_shuffle=10000, print_vals=False, forc
     twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals)
 
 
-def twinset_group_correlations(fmri_dir):
+def twinset_group_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and group-averaged brains.
     Called from twinset_group_permutations() if correlations don't exist or if resampling.
     """
     corr = np.zeros((156, 156))
-    overlap = get_subj_overlap()
+    overlap = get_subj_overlap(roi_list)
 
+    rng = range(1,157)
     desc = 'Generating correlations with group-averaged brains'
-    for i_pred, image_pred in enumerate(tqdm(range(1,157), bar_format=TQDM_FORMAT, desc=desc)):
+    for i_pred, image_pred in enumerate(tqdm(rng, bar_format=TQDM_FORMAT, ncols=100, desc=desc)):
         pred_brain = nib.load(f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
+        pred_overlap = pred_brain[overlap]
         for i_test, image_test in enumerate(range(1,157)):
             filename = f'data/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
             true_brain = nib.load(filename).get_fdata()
-            pred_overlap = pred_brain[overlap]
             true_overlap = true_brain[overlap]
 
             pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0]
@@ -125,9 +252,10 @@ def twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals):
 
 
 ### Category level analysis:
-def twinset_category_permutations(fmri_dir, 
+def twinset_category_permutations(fmri_dir,
+                                  roi_list=['LOC', 'RSC', 'PPA'],
                                   n_shuffle=1000, 
-                                  print_vals=False, 
+                                  print_vals=False,
                                   force_resample=False):
     """ 
     Generates shuffled permutations for category-level analysis for Twinset. 
@@ -135,7 +263,7 @@ def twinset_category_permutations(fmri_dir,
     force_resample -- re-generates correlations before calculating null distribution
     """
     if force_resample:
-        twinset_category_correlations(fmri_dir)
+        twinset_category_correlations(fmri_dir, roi_list=roi_list)
 
     filename = f"data/twinset/correlations/corr_categories.pkl"
     full_corr = np.load(filename, allow_pickle=True)
@@ -163,7 +291,7 @@ def twinset_category_permutations(fmri_dir,
         category_diffs = np.zeros(num_resample)
         count_over_real = 0
         desc = f'Generating permutations for \'{TWINSET_CATEGORIES[c]}\''
-        for i in tqdm(range(num_resample), bar_format=TQDM_FORMAT, desc=desc):
+        for i in tqdm(range(num_resample), bar_format=TQDM_FORMAT, ncols=100, desc=desc):
             df = pd.DataFrame(corr) # reset dataframe
             df = df.sample(frac=1).reset_index(drop=True) # take random sample
             df = pd.DataFrame.to_numpy(df)
@@ -180,13 +308,13 @@ def twinset_category_permutations(fmri_dir,
     twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
 
-def twinset_category_correlations(fmri_dir):
+def twinset_category_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and group-averaged brains for each image category.
     Called from twinset_category_permutations() if correlations don't exist or if resampling.
     """
     corr = np.zeros((5,), dtype=object)
-    overlap = get_subj_overlap()
+    overlap = get_subj_overlap(roi_list)
 
     for cat_idx, cat_range in enumerate([range(1,29), range(29,65), range(65,101),
                                          range(101, 125), range(125,157)]):
@@ -195,11 +323,10 @@ def twinset_category_correlations(fmri_dir):
         desc = f'Generating correlations for \'{TWINSET_CATEGORIES[cat_idx]}\''
         for i_pred, image_pred in enumerate(tqdm(cat_range, bar_format=TQDM_FORMAT, desc=desc)):
             pred_brain = nib.load(f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz').get_fdata()
-
+            pred_overlap = pred_brain[overlap]
             for i_test, image_test in enumerate(cat_range):
                 filename = f'data/twinset/avgs/avg_beta_{"{:04d}".format(image_test)}.nii.gz'
                 true_brain = nib.load(filename).get_fdata()
-                pred_overlap = pred_brain[overlap]
                 true_overlap = true_brain[overlap]
 
                 pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0] #just get r, not p val
@@ -252,6 +379,7 @@ def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
 
 ### Participant level analysis:
 def twinset_participant_permutations(fmri_dir,
+                                     roi_list=['LOC', 'RSC', 'PPA'],
                                      n_shuffle=1000,
                                      print_vals=False,
                                      force_resample=False):
@@ -261,7 +389,7 @@ def twinset_participant_permutations(fmri_dir,
     force_resample -- re-generates correlations before calculating null distribution
     """
     if force_resample:
-        twinset_participant_correlations(fmri_dir)
+        twinset_participant_correlations(fmri_dir, roi_list=roi_list)
 
     filename = f"data/twinset/correlations/corr_per_subj.pkl"
     full_corr = np.load(filename, allow_pickle=True)
@@ -273,7 +401,7 @@ def twinset_participant_permutations(fmri_dir,
     p_stats = np.empty((num_cat,2))
 
     desc="Generating permutations for each participant"
-    for c in tqdm(range(num_cat), bar_format=TQDM_FORMAT, desc=desc):
+    for c in tqdm(range(num_cat), bar_format=TQDM_FORMAT, desc=desc, ncols=100):
         corr = full_corr[c] # get specific corr matrix for subject
         corr = np.delete(corr, 19, axis=0)
         corr = np.delete(corr, 19, axis=1)
@@ -303,30 +431,29 @@ def twinset_participant_permutations(fmri_dir,
     twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
 
-def twinset_participant_correlations(fmri_dir):
+def twinset_participant_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and real brains for each participant.
     Called from twinset_participant_permutations() if correlations don't exist or if resampling.
     """
     corr = np.zeros((15,), dtype=object)
-    overlap = get_subj_overlap()
+    overlap = get_subj_overlap(roi_list)
     num_images = 156
 
     total_num_images = 15 * num_images
     desc='Generating correlations per participant'
-    with tqdm(total=total_num_images, bar_format=TQDM_FORMAT, desc=desc) as pbar:
+    with tqdm(total=total_num_images, bar_format=TQDM_FORMAT, desc=desc, ncols=100) as pbar:
         for subj in range(0,15):
             subj_corr = np.zeros((num_images, num_images))
-
             for i_pred, image_pred in enumerate(range(1,num_images+1)):
                 pbar.update(1)
                 pred_filename = f'{fmri_dir}/{"{:03d}".format(image_pred)}.nii.gz'
                 pred_brain = nib.load(pred_filename).get_fdata()
+                pred_overlap = pred_brain[overlap]
                 for i_test, image_test in enumerate(range(1,num_images+1)):
                     filename = f'data/twinset/subj{"{:02d}".format(subj+1)}/' \
                                f'r_m_s_beta_{"{:04d}".format(image_test)}.nii.gz'
                     true_brain = nib.load(filename).get_fdata()
-                    pred_overlap = pred_brain[overlap]
                     true_overlap = true_brain[overlap]
 
                     pearson_r = stats.pearsonr(pred_overlap, true_overlap)[0] #just get r, not p val
@@ -407,7 +534,7 @@ def get_luminance(input_dir, TRs=168, center_crop=False):
     downsampled_shape = np.concatenate((mov.T.shape[0:3], [TRs]))
     mov_convd = np.zeros(downsampled_shape)
     mov_flattened = mov.T.reshape((-1, mov.T.shape[-1]))
-    conv_flattened = conv_hrf_and_downsample(mov_flattened, 2, TRs)
+    conv_flattened = conv_hrf_and_downsample(mov_flattened, TR=2, num_TR=TRs)
     mov_convd = conv_flattened.reshape((downsampled_shape))
     mov_l = mov_convd.T
 
@@ -421,13 +548,14 @@ def get_luminance(input_dir, TRs=168, center_crop=False):
 
     return y_flat
 
-
+# Could be sped up by caching all 33 overlaps and then generating bootstrapped brains from this TODO change comment
 def generate_bootstrapped_correlations(pred,
                                        real,
                                        lum,
                                        TR_band=None,
                                        num_bootstraps=100,
-                                       force_resample=False):
+                                       force_resample=False,
+                                       roi_list=['LOC', 'PPA', 'RSC']):
     """ 
     Generates correlations between predicted and real brains, and with luminance and real brains.
     Uses 100 bootstrapped averages of real brains for analyses, and generates those if don't exist
@@ -436,9 +564,9 @@ def generate_bootstrapped_correlations(pred,
     if TR_band != None:
         band = get_TR_band(TR_band, nTR=real.shape[0])
 
-    init_subj_TRs = f'derivatives/init_brain.nii.gz'
+    init_subj_TRs = f'img2fmri/derivatives/init_brain.nii.gz'
     init_subj_nib = nib.load(init_subj_TRs)
-    overlap = get_subj_overlap()
+    overlap = get_subj_overlap(roi_list)
 
     nTR = lum.shape[0]
     notdiag = 1-np.diag(np.ones(158)).astype(bool)
@@ -451,7 +579,7 @@ def generate_bootstrapped_correlations(pred,
         if (glob.glob(f'data/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz') == [] or
             force_resample):
             subj_sample = np.random.choice(range(123,156), size=33, replace=True)
-            avg = average_subject_permutation(subj_sample)
+            avg = average_pc_subjects(subj_sample, roi_list=roi_list)
             nib.save(nib.Nifti1Image(avg, affine=init_subj_nib.affine),
                     f'data/partly_cloudy/bootstraps/bootstrap_{b}.nii.gz')
 
@@ -657,9 +785,7 @@ def pc_bootstrapped_difference_4TRs(bound_averages):
 
 
 def get_TR_band(bandwidth, nTR):
-    """
-    Returns a 1D bool array for indexing into specific bands around diagonal
-    """
+    """Returns a 1D bool array for indexing into specific bands around diagonal."""
     upt = ~np.triu(np.ones(nTR).astype(bool), bandwidth + 1)
     lot = np.triu(np.ones(nTR).astype(bool), -bandwidth)
     notdiag = 1-np.diag(np.ones(nTR)).astype(bool)
@@ -670,7 +796,7 @@ def get_TR_band(bandwidth, nTR):
 
 
 def num_bootstraps_below_zero(diffs):
-    """ Returns number of samples below zero for calculating p-values on bound. trig. avg. plots """
+    """ Returns number of samples below zero for calculating p-values on bound. trig. avg. plots."""
     len_diffs = diffs.shape[0]
     num_bootstraps = diffs.shape[1]
 
@@ -686,13 +812,12 @@ def num_bootstraps_below_zero(diffs):
     return (num_below_zero + 1) / (num_bootstraps - num_nans + 1)
 
 
-def average_subject_permutation(subject_list):
+def average_pc_subjects(subject_list, roi_list=['LOC', 'PPA', 'RSC']):
     """ Returns avg (zscore of sum of zscored (+ra, +dcto)) of a given sample of real brains """
-    init_filename = f'derivatives/init_brain.nii.gz' # For initializing brain
+    init_filename = f'img2fmri/derivatives/init_brain.nii.gz' # For initializing brain
     init_brain_nib = nib.load(init_filename)
-    sum_brains = np.full((init_brain_nib.shape), np.nan)
-    nTR = 168
-    overlap = get_subj_overlap()
+    sum_brains = np.full((init_brain_nib.shape), 0.)
+    overlap = get_subj_overlap(roi_list)
 
     for subj in subject_list:
         subj_TR = f'data/partly_cloudy/subjects_preprocessed/subj{subj}.nii.gz'
@@ -705,42 +830,48 @@ def average_subject_permutation(subject_list):
 
 ##### Plotting functions:
 def plot_correlation_matrices(pred, real, lum):
-    """ Plots correlation matrices for Partly Cloudy analyses """
+    """ Plots correlation matrices for Partly Cloudy analyses."""
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(12,4))
     axes[0].imshow(pred, vmin=-1, vmax=1)
     axes[1].imshow(real, vmin=-1, vmax=1)
     im = axes[2].imshow(lum, vmin=-1, vmax=1)
-    cbar_ax = fig.add_axes([0.35, -0.05, 0.33, 0.05])
+    cbar_ax = fig.add_axes([0.35, -0.07, 0.33, 0.05])
     fig.colorbar(im, cax=cbar_ax, shrink=0.6, orientation='horizontal')
-    axes[0].set_xlabel('Predicted brains', fontsize=12)
-    axes[1].set_xlabel('Real brains', fontsize=12)
-    axes[2].set_xlabel('Image luminace', fontsize=12)
+    ts = ['Predicted response', 'Real brains', 'Image luminace']
+    for t, a in zip(ts, axes.ravel()):
+        a.set_ylabel(f'TRs (2s)', fontsize=12)
+        a.set_xlabel(f'TRs (2s)\n{t}', fontsize=12)
 
+    plt.subplots_adjust(wspace=0.3)
     for a, ax in enumerate(axes.ravel()):
         ax.text(-0.13, -.15, string.ascii_lowercase[a], transform=ax.transAxes, 
                 size=16, weight='bold')
-    fig.suptitle('Correlation matrices for Partly Cloudy', fontsize=16, y=1)
+    fig.suptitle('Correlation matrices for Partly Cloudy', fontsize=16, y=0.92)
 
 
 def plot_preprocessing_matrices(pred_voxels, conv, removed_avg, removed_dct):
-    """ Plots correlation matrices for preprocessing steps """
-    fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(16,4))
+    """ Plots correlation matrices for preprocessing steps."""
+    fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(16,5),)
     axes[0].imshow(np.corrcoef(pred_voxels.T), vmin=-1, vmax=1)
     axes[1].imshow(np.corrcoef(conv[:, 2:].T), vmin=-1, vmax=1)
     im = axes[2].imshow(np.corrcoef(removed_avg[:, 2:].T), vmin=-1, vmax=1)
     axes[3].imshow(np.corrcoef(removed_dct[:, 2:].T), vmin=-1, vmax=1)
-    cbar_ax = fig.add_axes([0.35, -0.05, 0.33, 0.05])
-    fig.colorbar(im, cax=cbar_ax, shrink=0.6, orientation='horizontal')
-    axes[0].set_xlabel('Predicted response', fontsize=12)
-    axes[1].set_xlabel('Convolve w/ HRF, downsample', fontsize=12)
-    axes[2].set_xlabel('Remove average', fontsize=12)
-    axes[3].set_xlabel('Remove DCT', fontsize=12)
+    cbar_ax = fig.add_axes([0.35, 0.04, 0.33, 0.05])
+    fig.colorbar(im, cax=cbar_ax, shrink=0.6, orientation='horizontal',)
+    ts = ['Predicted response', 'Convolve w/ HRF and downsample', 'Remove average', 'Remove DCT']
+    axes[0].set_ylabel(f'Movie frames (2Hz)', fontsize=12)
+    axes[0].set_xlabel(f'Movie frames (2Hz)\n{ts[0]}', fontsize=12)
+    for t, a in zip(ts[1:], axes.ravel()[1:]):
+        a.set_ylabel(f'TRs (2s)', fontsize=12)
+        a.set_xlabel(f'TRs (2s)\n{t}', fontsize=12)
+
+    plt.subplots_adjust(wspace=0.3)
 
     for a, ax in enumerate(axes.ravel()):
         ax.text(-0.13, -.15, string.ascii_lowercase[a], transform=ax.transAxes, 
                 size=16, weight='bold')
     fig.suptitle('Correlation matrices of Partly Cloudy prediction preprocessing', 
-                 fontsize=16, y=.95)
+                 fontsize=16, y=.83)
 
 
 # Asterisk code modified from https://stackoverflow.com/a/52333561
@@ -833,16 +964,15 @@ def plot_significance_asterisks_bootstraps(data, max_y, maxasterix=None, fs=12):
                        (l_of_t[-1]+0.425)/xticks[-1],
                        linestyle='-', color='black')
 
-# Multicolor patch code below assisted from https://stackoverflow.com/a/67870930/12685473
 class MulticolorPatch(object):
-    """ Define an object that will be used by the legend """
+    """Define an object that will be used by the legend."""
     def __init__(self, colors, alpha=1):
         self.colors = colors
         self.alpha = alpha
 
 
 class MulticolorPatchHandler(object):
-    """ Define a handler for the MulticolorPatch object """
+    """Define a handler for the MulticolorPatch object."""
     def legend_artist(self, legend, orig_handle, fontsize, handlebox):
         width, height = handlebox.width, handlebox.height
         patches = []
