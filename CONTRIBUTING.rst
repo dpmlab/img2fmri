@@ -1,12 +1,23 @@
 Goals
 =====
 
-We've built a python package and command line interface (CLI) to predict fMRI
-responses to visual stimuli (images and movies) with relatively low overhead.
+We've built a python package and command line interface (CLI) to predict 
+group-averaged fMRI responses to visual stimuli (images and movies).
 We encourage other researchers to expand the prediction pipeline to other 
 feature extraction/machine learning models, other regions of visual cortex,
 and even new fMRI training datasets. Our intent is that our package can be
-expanded upon and remixed for neuroscience use cases.
+expanded upon and reused for varied neuroscience use cases.
+
+Support and Issues
+==================
+
+Users are encouraged to first view our API documentation linked from our README,
+and also encouraged to view ``overview.ipynb`` and ``analysis.py`` to see example 
+uses of ``img2fmri``. 
+
+Further issues and support can be handled on a case-by-case basis, and users are 
+encouraged to create a "New Issue" in the Issue tab on our Github repository, or
+to email the author at mbb2176@columbia.edu for questions.
 
 How to contribute
 =================

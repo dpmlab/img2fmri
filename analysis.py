@@ -157,7 +157,7 @@ def twinset_ROI_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
 
 ### Group-level analysis:
 def twinset_group_permutations(fmri_dir,
-                               roi_list=['LOC', 'RSC', 'PPA'],
+                               roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'],
                                n_shuffle=10000,
                                print_vals=False,
                                force_resample=False):
@@ -201,7 +201,7 @@ def twinset_group_permutations(fmri_dir,
     twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals)
 
 
-def twinset_group_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
+def twinset_group_correlations(fmri_dir, roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and group-averaged brains.
     Called from twinset_group_permutations() if correlations don't exist or if resampling.
@@ -253,7 +253,7 @@ def twinset_group_plotting(real_diff, shuffled_diffs, p, print_vals):
 
 ### Category level analysis:
 def twinset_category_permutations(fmri_dir,
-                                  roi_list=['LOC', 'RSC', 'PPA'],
+                                  roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'],
                                   n_shuffle=1000, 
                                   print_vals=False,
                                   force_resample=False):
@@ -308,7 +308,7 @@ def twinset_category_permutations(fmri_dir,
     twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
 
-def twinset_category_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
+def twinset_category_correlations(fmri_dir, roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and group-averaged brains for each image category.
     Called from twinset_category_permutations() if correlations don't exist or if resampling.
@@ -379,7 +379,7 @@ def twinset_category_plotting(real_diffs, shuffled_diffs, p_stats, print_vals):
 
 ### Participant level analysis:
 def twinset_participant_permutations(fmri_dir,
-                                     roi_list=['LOC', 'RSC', 'PPA'],
+                                     roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'],
                                      n_shuffle=1000,
                                      print_vals=False,
                                      force_resample=False):
@@ -431,7 +431,7 @@ def twinset_participant_permutations(fmri_dir,
     twinset_participant_plotting(real_diffs, shuffled_diffs, p_stats, print_vals)
 
 
-def twinset_participant_correlations(fmri_dir, roi_list=['LOC', 'RSC', 'PPA']):
+def twinset_participant_correlations(fmri_dir, roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA']):
     """
     Generates correlations between all predicted and real brains for each participant.
     Called from twinset_participant_permutations() if correlations don't exist or if resampling.
@@ -555,7 +555,7 @@ def generate_bootstrapped_correlations(pred,
                                        TR_band=None,
                                        num_bootstraps=100,
                                        force_resample=False,
-                                       roi_list=['LOC', 'PPA', 'RSC']):
+                                       roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA']):
     """ 
     Generates correlations between predicted and real brains, and with luminance and real brains.
     Uses 100 bootstrapped averages of real brains for analyses, and generates those if don't exist
@@ -812,7 +812,7 @@ def num_bootstraps_below_zero(diffs):
     return (num_below_zero + 1) / (num_bootstraps - num_nans + 1)
 
 
-def average_pc_subjects(subject_list, roi_list=['LOC', 'PPA', 'RSC']):
+def average_pc_subjects(subject_list, roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA']):
     """ Returns avg (zscore of sum of zscored (+ra, +dcto)) of a given sample of real brains """
     init_filename = f'img2fmri/derivatives/init_brain.nii.gz' # For initializing brain
     init_brain_nib = nib.load(init_filename)

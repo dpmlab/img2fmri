@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>utils module &mdash; img2fmri 0.2.dev1 documentation</title>
+  <title>utils module &mdash; img2fmri 0.2.dev3 documentation</title>
       <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
       <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
   <!--[if lt IE 9]>
@@ -123,7 +123,7 @@ to TR timecourse.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="utils.get_subj_overlap">
-<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">get_subj_overlap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['LOC',</span> <span class="pre">'PPA',</span> <span class="pre">'RSC']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#utils.get_subj_overlap" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">get_subj_overlap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['EarlyVis',</span> <span class="pre">'OPA',</span> <span class="pre">'LOC',</span> <span class="pre">'RSC',</span> <span class="pre">'PPA']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#utils.get_subj_overlap" title="Permalink to this definition"></a></dt>
 <dd><p>Returns the indices of an MNI brain volume comprising the logical OR of our subjects’ ROIs,
 after smoothing with a sigma=1 (the default smoothing kernel of img2fmri). If using a different
 sigma value with the prediction pipeline, users should retrieve pre-smoothed masks using
@@ -132,10 +132,8 @@ img2fmri.smooth_brains() for example smoothing code).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>roi_list</strong> (<em>list</em>) – List of ROIs to return indices for.
-Defaults to [‘LOC’, ‘PPA’, ‘RSC’].</p></li>
-<li><p><strong>threshold</strong> (<em>float</em>) – Lowerbound threshold used to consider a voxel within the mask.
-Defaults to 0.15.</p></li>
+<li><p><strong>roi_list</strong> (<em>list</em>) – List of ROIs to return indices for. Defaults to [‘EarlyVis’, ‘OPA’, ‘LOC’, ‘RSC’, ‘PPA’].</p></li>
+<li><p><strong>threshold</strong> (<em>float</em>) – Lowerbound threshold used to consider a voxel within the mask. Defaults to 0.15.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -151,14 +149,13 @@ value (post smoothing) &gt; threshold.</p></li>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="utils.get_subj_overlap_nonsmoothed">
-<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">get_subj_overlap_nonsmoothed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['LOC',</span> <span class="pre">'PPA',</span> <span class="pre">'RSC']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#utils.get_subj_overlap_nonsmoothed" title="Permalink to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">utils.</span></span><span class="sig-name descname"><span class="pre">get_subj_overlap_nonsmoothed</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">roi_list</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">['EarlyVis',</span> <span class="pre">'OPA',</span> <span class="pre">'LOC',</span> <span class="pre">'RSC',</span> <span class="pre">'PPA']</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#utils.get_subj_overlap_nonsmoothed" title="Permalink to this definition"></a></dt>
 <dd><p>Returns the indices of an MNI brain volume comprising the logical OR of our subjects’ ROIs,
 before smoothing.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>roi_list</strong> (<em>list</em>) – List of ROIs to return indices for.
-Defaults to [‘LOC’, ‘PPA’, ‘RSC’].</p></li>
+<li><p><strong>roi_list</strong> (<em>list</em>) – List of ROIs to return indices for. Defaults to [‘EarlyVis’, ‘OPA’, ‘LOC’, ‘RSC’, ‘PPA’].</p></li>
 <li><p><strong>threshold</strong> (<em>float</em>) – Lowerbound threshold used to consider a voxel within the mask.
 Defaults to 0.15.</p></li>
 </ul>

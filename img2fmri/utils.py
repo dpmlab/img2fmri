@@ -19,7 +19,7 @@ TQDM_FORMAT = '{l_bar}{bar:10}| {n}/{total_fmt} [{elapsed}<{remaining}]'
 MNI_SHAPE = (91, 109, 91)
 
 
-def get_subj_overlap(roi_list=['LOC', 'PPA', 'RSC'], threshold=0.15):
+def get_subj_overlap(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshold=0.15):
     """Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs,
     after smoothing with a sigma=1 (the default smoothing kernel of img2fmri). If using a different
     sigma value with the prediction pipeline, users should retrieve pre-smoothed masks using
@@ -29,11 +29,9 @@ def get_subj_overlap(roi_list=['LOC', 'PPA', 'RSC'], threshold=0.15):
     Parameters
     ----------
     roi_list : list
-        List of ROIs to return indices for.
-        Defaults to ['LOC', 'PPA', 'RSC'].
+        List of ROIs to return indices for. Defaults to ['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'].
     threshold : float
-        Lowerbound threshold used to consider a voxel within the mask.
-        Defaults to 0.15.
+        Lowerbound threshold used to consider a voxel within the mask. Defaults to 0.15.
 
     Returns
     -------
@@ -68,15 +66,14 @@ def get_subj_overlap(roi_list=['LOC', 'PPA', 'RSC'], threshold=0.15):
     return subject_overlap
 
 
-def get_subj_overlap_nonsmoothed(roi_list=['LOC', 'PPA', 'RSC'], threshold=0.15):
+def get_subj_overlap_nonsmoothed(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshold=0.15):
     """Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs,
     before smoothing.
 
     Parameters
     ----------
     roi_list : list
-        List of ROIs to return indices for.
-        Defaults to ['LOC', 'PPA', 'RSC'].
+        List of ROIs to return indices for. Defaults to ['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'].
     threshold : float
         Lowerbound threshold used to consider a voxel within the mask.
         Defaults to 0.15.
