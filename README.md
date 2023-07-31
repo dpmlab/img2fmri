@@ -83,7 +83,7 @@ Users can test their img2fmri installation by using the following command:
 which will run the tests located in `img2fmri/tests/run_test.py`, which test the python-imported image prediction, the movie prediction pipeline, and the command line interface package usage.
 
 ## Support, questions, and how to contribute
-Users are encouraged to review [CONTRIBUTING.rst](CONTRIBUTING.rst) with suggestions on Users are encouraged to reiv [Max Bennett](mailto:mbb2176@columbia.edu) with questions or issues.
+Users are encouraged to review [CONTRIBUTING.rst](CONTRIBUTING.rst) with suggestions on how to report issues and contribute to the img2fmri software package. Users can also email the author at [Max Bennett](mailto:mbb2176@columbia.edu) with questions or issues.
 
 ## License
 This package is licensed under an MIT license found in [LICENSE.txt](LICENSE.txt)
