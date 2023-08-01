@@ -2,7 +2,8 @@
 
 **img2fmri**: a python package for predicting group-level fMRI responses to visual stimuli using deep neural networks
 
-[![PyPI version](https://badge.fury.io/py/img2fmri.svg)](https://badge.fury.io/py/img2fmri) [![Documentation Status](https://readthedocs.org/projects/img2fmri/badge/?version=latest)](https://img2fmri.readthedocs.io/en/latest/?badge=latest)
+[![PyPI version](https://badge.fury.io/py/img2fmri.svg)](https://badge.fury.io/py/img2fmri) [![Documentation Status](https://readthedocs.org/projects/img2fmri/badge/?version=latest)](https://img2fmri.readthedocs.io/en/latest/?badge=latest) [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8206556.svg)](https://doi.org/10.5281/zenodo.8206556)
+
 
 <img src="https://raw.githubusercontent.com/dpmlab/img2fmri/main/model_overview.png" width="700" class="center"/>
 
