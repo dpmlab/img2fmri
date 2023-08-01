@@ -20,11 +20,8 @@ MNI_SHAPE = (91, 109, 91)
 
 
 def get_subj_overlap(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshold=0.15):
-    """Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs,
-    after smoothing with a sigma=1 (the default smoothing kernel of img2fmri). If using a different
-    sigma value with the prediction pipeline, users should retrieve pre-smoothed masks using
-    'get_subj_overlap_nonsmoothed' and then smooth those masks with their chosen kernel (see
-    img2fmri.smooth_brains() for example smoothing code).
+    """Returns the indices of an MNI brain volume comprising the union of our subjects' ROIs,
+    after smoothing with a sigma=1 (the default smoothing kernel of img2fmri).
 
     Parameters
     ----------
@@ -35,8 +32,6 @@ def get_subj_overlap(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshol
 
     Returns
     -------
-    numpy.ndarray
-        3D array of boolean values, with shape of MNI brain, where voxel is true if
     numpy.ndarray
         3D array of boolean values, with shape of MNI brain, where voxel is true if
         value (post smoothing) > threshold.
@@ -67,7 +62,7 @@ def get_subj_overlap(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshol
 
 
 def get_subj_overlap_nonsmoothed(roi_list=['EarlyVis', 'OPA', 'LOC', 'RSC', 'PPA'], threshold=0.15):
-    """Returns the indices of an MNI brain volume comprising the logical OR of our subjects' ROIs,
+    """Returns the indices of an MNI brain volume comprising the union of our subjects' ROIs,
     before smoothing.
 
     Parameters

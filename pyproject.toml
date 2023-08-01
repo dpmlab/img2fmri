@@ -13,7 +13,7 @@ img2fmri = [".gitattributes", "*.DS_STORE"]
 
 [project]
 name = "img2fmri"
-version = '0.2.dev3'
+version = '0.2.dev4'
 authors = [
   { name="Max Bennett", email="mbb2176@columbia.edu" },
 ]

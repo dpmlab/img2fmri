@@ -548,7 +548,7 @@ def get_luminance(input_dir, TRs=168, center_crop=False):
 
     return y_flat
 
-# Could be sped up by caching all 33 overlaps and then generating bootstrapped brains from this TODO change comment
+
 def generate_bootstrapped_correlations(pred,
                                        real,
                                        lum,
