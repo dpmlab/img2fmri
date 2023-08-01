@@ -34,7 +34,7 @@ and if successfully built, can be run and tested with:
 Alternatively, our pre-built image can be pulled and used,though do note that this is a large (~10GB compressed) image.
 
     docker pull mbennett12/img2fmri
-    docker run -it -p 8888:8888 img2fmri
+    docker run -it -p 8888:8888 mbennett12/img2fmri
     pytest -s --pyargs img2fmri
 
 ### Conda
