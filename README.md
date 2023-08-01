@@ -24,7 +24,7 @@ For users who already have FSL and AFNI installed, img2fmri can be installed and
 
 For users that intend to use our docker environment to test and use img2fmri, the Dockerfile included in this repo can be used to build an image as follows:
 
-    docker build --no-cache --tag img2fmri --file Dockerfile .
+    docker build --tag img2fmri --file Dockerfile .
 
 and if successfully built, can be run and tested with:
 
