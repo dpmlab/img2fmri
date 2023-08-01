@@ -136,7 +136,8 @@ def generate_activations(input_dir, output_dir=join('temp','activations'), cente
                                      std=[0.229, 0.224, 0.225])
     to_tensor = transforms.ToTensor()
 
-    # Load our pretrained model
+    # Load our pretrained model. NOTE: this is where the model could be extended or feature 
+    # extraction model changed.
     model = models.resnet18(weights='DEFAULT')
     model.eval()
 

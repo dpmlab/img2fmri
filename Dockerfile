@@ -71,6 +71,7 @@ RUN apt-get update -qq \
            tcsh \
            xfonts-base \
            xvfb \
+           git \
     && rm -rf /var/lib/apt/lists/* \
     && _reproenv_tmppath="$(mktemp -t tmp.XXXXXXXXXX.deb)" \
     && curl -fsSL --retry 5 -o "${_reproenv_tmppath}" https://apt.ligo-wa.caltech.edu:8443/debian/pool/stretch/libxp6/libxp6_1.0.2-2_amd64.deb \

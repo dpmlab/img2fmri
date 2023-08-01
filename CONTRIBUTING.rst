@@ -93,6 +93,19 @@ fork. Alternatively, you can open a PR before your work is ready; in this case,
 you should start the PR title with ``WIP:``, to let people know your PR is work
 in progress.
 
+Model and ROI Extension
+=======================
+We encourage developers to extend our package to other feature extraction models and to other 
+visual cortex ROIs, and include a comment on where to change the feature extraction model in the 
+predict.generate_activations() function. This can also be found in the 
+model_training/model_training.ipynb notebook.
+
+If extending to new ROIs and new training participants, we note that developers will need to adapt 
+our pipeline from predicting responses in three subject's brain spaces into n number of subject's spaces,
+and furthermore, adapt the transformation to MNI pipeline accordingly. Lastly, we note that the 
+utils.get_subj_overlap() function should be updated to include these additional ROIs, and the union 
+of their bool masks accordingly. Developers interested in extending the model in this manner are 
+encouraged to reach out to the authors for collaboration.
 
 Standards
 =========

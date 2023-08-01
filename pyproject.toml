@@ -39,6 +39,7 @@ dependencies = [
   "torchvision>=0.15.2",
   "tqdm>=4.65.0",
   "pytest>=7.1",
+  "wget>=3.2",
 ]
 
 [project.scripts]

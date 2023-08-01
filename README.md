@@ -6,6 +6,8 @@
 
 <img src="https://raw.githubusercontent.com/dpmlab/img2fmri/main/model_overview.png" width="700" class="center"/>
 
+Our model is intended to be used by researchers that might benefit from analyzing stimulus-driven patterns of activity in visual cortex, including research involving the temporal dynamics of visual cortex, or research conducted in the absence of an fMRI scanner and human subjects.
+
 Users are encouraged to read the background science information for an overview of the model and its intended uses ([science_overview.pdf](science_overview.pdf)).
 
 ## Installation
@@ -51,8 +53,9 @@ If running the docker container from the command:
 
     docker run -it -p 8888:8888 img2fmri
 
-users should then run the following command from within the container:
+users should then clone this repo and run the following command from within the container:
 
+    git clone https://github.com/dpmlab/img2fmri.git
     python3 -m notebook --allow-root --no-browser --ip=0.0.0.0
 
 in order to then access their docker container's jupyter notebook at the following url: `http://localhost:8888`. 
@@ -82,7 +85,7 @@ Users can test their img2fmri installation by using the following command:
 
 which will run the tests located in `img2fmri/tests/run_test.py`, which test the python-imported image prediction, the movie prediction pipeline, and the command line interface package usage.
 
-## Support, questions, and how to contribute
+## Support and Contributing
 Users are encouraged to review [CONTRIBUTING.rst](CONTRIBUTING.rst) with suggestions on how to report issues and contribute to the img2fmri software package. Users can also email the author at [Max Bennett](mailto:mbb2176@columbia.edu) with questions or issues.
 
 ## License
