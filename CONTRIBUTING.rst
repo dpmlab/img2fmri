@@ -98,7 +98,8 @@ Model and ROI Extension
 We encourage developers to extend our package to other feature extraction models and to other 
 visual cortex ROIs, and include a comment on where to change the feature extraction model in the 
 predict.generate_activations() function. This can also be found in the 
-model_training/model_training.ipynb notebook.
+model_training/model_training.ipynb notebook. Note that these new models will need to be saved and
+subsequently loaded by the prediction pipeline.
 
 If extending to new ROIs and new training participants, we note that developers will need to adapt 
 our pipeline from predicting responses in three subject's brain spaces into n number of subject's spaces,
