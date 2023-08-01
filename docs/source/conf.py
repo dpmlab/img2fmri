@@ -22,7 +22,7 @@ copyright = '2023, Maxwell Bennett'
 author = 'Maxwell Bennett'
 
 # The full version, including alpha/beta/rc tags
-release = '0.2.dev5'
+release = '1.0'
 
 
 # -- General configuration ---------------------------------------------------
