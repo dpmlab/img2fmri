@@ -1,0 +1,1 @@
+../hmm-extension/imgtofmri_command_line.sh
