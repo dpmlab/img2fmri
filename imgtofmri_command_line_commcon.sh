@@ -29,7 +29,7 @@ for filename in $video_clips_dir/*.mp4; do
 	if [ -n "$(ls -A $cur_output_dir)" ]; then
 	    echo "$cur_output_dir already contains files - not rerunning imgtofmri"
 	else
-	    python /home/hdzucker/workspace/imgtofmri/imgtofmri.py --input $cur_frames_dir --output $cur_output_dir
+	    img2fmri --input $cur_frames_dir --output $cur_output_dir
 	fi
 
 done
